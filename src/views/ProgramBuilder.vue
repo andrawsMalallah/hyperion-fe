@@ -29,6 +29,7 @@ const draftDays = ref([])
 const draftProgramName = ref('')
 const isDirty = ref(false)
 const isSaving = ref(false)
+const isDeleting = ref(false)
 const errorMsg = ref('')
 const validationErrors = ref({})
 
@@ -242,12 +243,18 @@ const deleteProgram = () => {
 
 const handleDeleteProgramConfirm = async () => {
   isDirty.value = false // Prevent leave guard
-  if (route.params.programId === 'new') {
-    programStore.draftProgram = null
-  } else {
-    await programStore.deleteProgram(targetProgram.value.id)
+  isDeleting.value = true
+  try {
+    if (route.params.programId === 'new') {
+      programStore.draftProgram = null
+    } else {
+      await programStore.deleteProgram(targetProgram.value.id)
+    }
+    router.push('/')
+  } catch (error) {
+    isDeleting.value = false
+    console.error('Failed to delete program:', error)
   }
-  router.push('/')
 }
 
 const getMuscleGroupColor = (group) => {
@@ -391,12 +398,13 @@ const getMuscleGroupColor = (group) => {
 
           <!-- Builder Actions — all three buttons together -->
           <div class="builder-actions" style="margin-top: -12px;">
-            <button class="builder-delete-btn" @click="deleteProgram" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
+              <div v-if="isDeleting" class="spinner button-spinner"></div>
+              <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
-              {{ route.params.programId === 'new' ? 'Discard' : 'Delete' }}
+              {{ isDeleting ? (route.params.programId === 'new' ? 'Discarding...' : 'Deleting...') : (route.params.programId === 'new' ? 'Discard' : 'Delete') }}
             </button>
 
             <div class="builder-actions-divider"></div>

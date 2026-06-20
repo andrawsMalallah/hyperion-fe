@@ -26,6 +26,7 @@ const day = computed(() => programStore.program_days.find(d => d.id === parsedDa
 // This is local component state to manage the UI structure
 const activeWorkoutSession = ref([])
 const pageLoading = ref(true)
+const isSaving = ref(false)
 const errorMsg = ref('')
 const validationErrors = ref({})
 
@@ -162,6 +163,11 @@ const exerciseHistory = computed(() => {
 const showLeaveModal = ref(false)
 const nextRoute = ref(null)
 const isLeaving = ref(false)
+const showSaveSuccessModal = ref(false)
+
+const handleGoHome = () => {
+  router.push('/')
+}
 
 const hasChanges = computed(() => {
   return activeWorkoutSession.value.some(ex => ex.sets.some(s => s.completed))
@@ -199,10 +205,13 @@ async function saveWorkout() {
   })
 
   try {
-    isLeaving.value = true
+    isSaving.value = true
     await workoutStore.finishWorkout()
-    router.push('/')
+    isLeaving.value = true
+    isSaving.value = false
+    showSaveSuccessModal.value = true
   } catch (error) {
+    isSaving.value = false
     isLeaving.value = false
     if (error.response && error.response.status === 422) {
       validationErrors.value = error.response.data.errors || {}
@@ -366,13 +375,14 @@ async function saveWorkout() {
 
           <div class="builder-actions-divider"></div>
 
-          <button class="builder-save-btn" @click="saveWorkout" :disabled="!hasChanges" :class="{ 'builder-save-btn--active': hasChanges }">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button class="builder-save-btn" @click="saveWorkout" :disabled="!hasChanges || isSaving" :class="{ 'builder-save-btn--active': hasChanges }">
+            <div v-if="isSaving" class="spinner button-spinner"></div>
+            <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
               <polyline points="17 21 17 13 7 13 7 21"></polyline>
               <polyline points="7 3 7 8 15 8"></polyline>
             </svg>
-            Save Workout
+            {{ isSaving ? 'Saving...' : (hasChanges ? 'Save Workout' : 'Saved') }}
           </button>
         </div>
       </div>
@@ -393,6 +403,17 @@ async function saveWorkout() {
       confirm-text="Leave" 
       cancel-text="Stay" 
       @confirm="confirmLeave" 
+    />
+
+    <!-- Save Success Modal -->
+    <AppModal 
+      v-model:show="showSaveSuccessModal" 
+      title="Workout Saved" 
+      message="Your workout has been saved successfully. Would you like to stay or return home?" 
+      type="confirm" 
+      confirm-text="Go Home" 
+      cancel-text="Stay"
+      @confirm="handleGoHome" 
     />
 
     <!-- Exercise History Modal -->
