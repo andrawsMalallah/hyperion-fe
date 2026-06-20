@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import api from '../api'
 
 export const useDiscoverStore = defineStore('discover', () => {
-  const discoverSplits = ref([])
+  const discoverPrograms = ref([])
   const discoverPage = ref(1)
   const discoverLoading = ref(false)
   const discoverHasMore = ref(true)
@@ -11,7 +11,7 @@ export const useDiscoverStore = defineStore('discover', () => {
 
   const isLoaded = ref(false)
 
-  async function fetchDiscoverSplits(reset = false, isScroll = false) {
+  async function fetchDiscoverPrograms(reset = false, isScroll = false) {
     if (discoverLoading.value) return
     if (!reset && !isScroll && isLoaded.value) return
 
@@ -19,21 +19,21 @@ export const useDiscoverStore = defineStore('discover', () => {
     try {
       if (reset) {
         discoverPage.value = 1
-        discoverSplits.value = []
+        discoverPrograms.value = []
         discoverHasMore.value = true
       }
 
-      const response = await api.get('/splits/discover', {
+      const response = await api.get('/programs/discover', {
         params: {
           page: discoverPage.value,
           search: searchQuery.value || undefined
         }
       })
 
-      const newSplits = response.data.data
+      const newPrograms = response.data.data
       const meta = response.data.meta
 
-      discoverSplits.value = [...discoverSplits.value, ...newSplits]
+      discoverPrograms.value = [...discoverPrograms.value, ...newPrograms]
 
       const currentPage = meta?.current_page || 1
       const lastPage = meta?.last_page || 1
@@ -53,7 +53,7 @@ export const useDiscoverStore = defineStore('discover', () => {
   }
 
   function reset() {
-    discoverSplits.value = []
+    discoverPrograms.value = []
     discoverPage.value = 1
     discoverLoading.value = false
     discoverHasMore.value = true
@@ -62,13 +62,13 @@ export const useDiscoverStore = defineStore('discover', () => {
   }
 
   return {
-    discoverSplits,
+    discoverPrograms,
     discoverPage,
     discoverLoading,
     discoverHasMore,
     searchQuery,
     isLoaded,
-    fetchDiscoverSplits,
+    fetchDiscoverPrograms,
     reset
   }
 })

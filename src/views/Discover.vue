@@ -11,7 +11,7 @@ const searchQuery = computed({
   get: () => discoverStore.searchQuery,
   set: (val) => { discoverStore.searchQuery = val }
 })
-const programs = computed(() => discoverStore.discoverprograms)
+const programs = computed(() => discoverStore.discoverPrograms)
 const loading = computed(() => discoverStore.discoverLoading)
 const hasMore = computed(() => discoverStore.discoverHasMore)
 const selectedProgram = ref(null)
@@ -20,8 +20,8 @@ let observer = null
 
 let searchTimeout = null
 
-async function fetchprograms(reset = false, isScroll = false) {
-  await discoverStore.fetchDiscoverprograms(reset, isScroll)
+async function fetchPrograms(reset = false, isScroll = false) {
+  await discoverStore.fetchDiscoverPrograms(reset, isScroll)
 }
 
 function onSearchInput() {
@@ -31,13 +31,13 @@ function onSearchInput() {
     return
   }
   searchTimeout = setTimeout(() => {
-    fetchprograms(true, false)
+    fetchPrograms(true, false)
   }, 1500)
 }
 
 function clearSearch() {
   searchQuery.value = ''
-  fetchprograms(true, false)
+  fetchPrograms(true, false)
 }
 
 function getTotalExercises(Program) {
@@ -66,7 +66,7 @@ watch(selectedProgram, (newVal) => {
 function setupObserver() {
   observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && !loading.value && hasMore.value) {
-      fetchprograms(false, true)
+      fetchPrograms(false, true)
     }
   }, { rootMargin: '100px' })
 
@@ -76,7 +76,7 @@ function setupObserver() {
 }
 
 onMounted(async () => {
-  await fetchprograms(false, false)
+  await fetchPrograms(false, false)
   setupObserver()
 })
 
