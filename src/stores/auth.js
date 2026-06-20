@@ -49,13 +49,13 @@ export const useAuthStore = defineStore('auth', {
       } catch (e) {
         console.error(e);
       } finally {
-        const splitStore = useProgramStore();
+        const programStore = useProgramStore();
         const exerciseStore = useExerciseStore();
         const workoutStore = useWorkoutStore();
         const historyStore = useHistoryStore();
         const discoverStore = useDiscoverStore();
         
-        splitStore.reset();
+        programStore.reset();
         exerciseStore.reset();
         workoutStore.reset();
         historyStore.reset();

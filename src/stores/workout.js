@@ -45,7 +45,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
 
     const payload = {
-      split_day_id: typeof activeWorkoutDayId.value === 'number' ? activeWorkoutDayId.value : null,
+      program_day_id: typeof activeWorkoutDayId.value === 'number' ? activeWorkoutDayId.value : null,
       date_timestamp: activeWorkoutStartTime.value || new Date().toISOString(),
       sets: activeWorkoutSets.value.map((s, index) => ({
         exercise_id: s.exercise_id,
