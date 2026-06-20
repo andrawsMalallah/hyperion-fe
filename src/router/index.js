@@ -48,7 +48,7 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/builder/:splitId?',
+    path: '/builder/:programId?',
     name: 'ProgramBuilder',
     component: ProgramBuilder,
     meta: { requiresAuth: true }

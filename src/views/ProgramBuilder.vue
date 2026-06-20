@@ -10,23 +10,23 @@ import PrimaryButton from '../components/PrimaryButton.vue'
 const router = useRouter()
 const route = useRoute()
 const exerciseStore = useExerciseStore()
-const splitStore = useProgramStore()
+const programStore = useProgramStore()
 
 const pageLoading = ref(true)
 
-const targetSplit = computed(() => {
-  if (route.params.splitId === 'new') {
-    return splitStore.draftSplit
+const targetProgram = computed(() => {
+  if (route.params.programId === 'new') {
+    return programStore.draftProgram
   }
-  if (route.params.splitId) {
-    return splitStore.user_splits.find(s => String(s.id) === String(route.params.splitId))
+  if (route.params.programId) {
+    return programStore.user_programs.find(s => String(s.id) === String(route.params.programId))
   }
-  return splitStore.user_splits.find(s => s.is_active)
+  return programStore.user_programs.find(s => s.is_active)
 })
 
 // Local Draft State
 const draftDays = ref([])
-const draftSplitName = ref('')
+const draftProgramName = ref('')
 const isDirty = ref(false)
 const isSaving = ref(false)
 const errorMsg = ref('')
@@ -43,13 +43,13 @@ const errorList = computed(() => {
 })
 
 const initializeDraft = () => {
-  if (targetSplit.value) {
-    draftSplitName.value = targetSplit.value.split_name
-    if (route.params.splitId === 'new') {
-      draftDays.value = JSON.parse(JSON.stringify(targetSplit.value.days || []))
+  if (targetProgram.value) {
+    draftProgramName.value = targetProgram.value.name
+    if (route.params.programId === 'new') {
+      draftDays.value = JSON.parse(JSON.stringify(targetProgram.value.days || []))
     } else {
       draftDays.value = JSON.parse(JSON.stringify(
-        splitStore.split_days.filter(d => String(d.split_id) === String(targetSplit.value.id))
+        programStore.program_days.filter(d => String(d.program_id) === String(targetProgram.value.id))
       ))
     }
   }
@@ -57,8 +57,8 @@ const initializeDraft = () => {
 
 onMounted(async () => {
   pageLoading.value = true
-  if (route.params.splitId && route.params.splitId !== 'new') {
-    await splitStore.fetchSingleSplit(route.params.splitId)
+  if (route.params.programId && route.params.programId !== 'new') {
+    await programStore.fetchSingleProgram(route.params.programId)
   }
   initializeDraft()
   pageLoading.value = false
@@ -148,25 +148,25 @@ const handleAddExercises = (exerciseIds) => {
 const showAddDayModal = ref(false)
 const showSaveSuccessModal = ref(false)
 const showDeleteDayModal = ref(false)
-const showDeleteSplitModal = ref(false)
+const showDeleteProgramModal = ref(false)
 const dayToDelete = ref(null)
 
 const defaultAddDayName = computed(() => "Day " + (draftDays.value.length + 1))
 
 const promptAddDay = () => showAddDayModal.value = true
 
-const deleteSplitModalTitle = computed(() => {
-  return route.params.splitId === 'new' ? 'Discard Draft' : 'Delete Program'
+const deleteProgramModalTitle = computed(() => {
+  return route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'
 })
 
-const deleteSplitModalMessage = computed(() => {
-  return route.params.splitId === 'new'
+const deleteProgramModalMessage = computed(() => {
+  return route.params.programId === 'new'
     ? 'Are you sure you want to discard this program draft? This action cannot be undone.'
     : 'Are you sure you want to delete this entire program? This action cannot be undone.'
 })
 
-const deleteSplitConfirmText = computed(() => {
-  return route.params.splitId === 'new' ? 'Discard Draft' : 'Delete Program'
+const deleteProgramConfirmText = computed(() => {
+  return route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'
 })
 
 const handleAddDayConfirm = (name) => {
@@ -174,7 +174,7 @@ const handleAddDayConfirm = (name) => {
     const newOrder = draftDays.value.length > 0 ? Math.max(...draftDays.value.map(d => d.display_order)) + 1 : 1
     draftDays.value.push({
       id: 'day-draft-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      split_id: targetSplit.value.id,
+      program_id: targetProgram.value.id,
       day_name: name,
       display_order: newOrder,
       exercises: []
@@ -196,25 +196,25 @@ const handleDeleteDayConfirm = () => {
   }
 }
 
-const saveSplit = async () => {
-  if (targetSplit.value) {
+const saveProgram = async () => {
+  if (targetProgram.value) {
     isSaving.value = true
     errorMsg.value = ''
     validationErrors.value = {}
     try {
-      if (route.params.splitId === 'new') {
-        const newId = await splitStore.saveNewSplit({
-          split_name: draftSplitName.value.trim() || 'Custom Program',
+      if (route.params.programId === 'new') {
+        const newId = await programStore.saveNewProgram({
+          name: draftProgramName.value.trim() || 'Custom Program',
           days: draftDays.value
         })
         if (newId) {
           router.replace(`/builder/${newId}`)
         }
       } else {
-        if (draftSplitName.value && draftSplitName.value.trim() !== '' && draftSplitName.value !== targetSplit.value.split_name) {
-          splitStore.renameSplit(targetSplit.value.id, draftSplitName.value.trim())
+        if (draftProgramName.value && draftProgramName.value.trim() !== '' && draftProgramName.value !== targetProgram.value.name) {
+          programStore.renameProgram(targetProgram.value.id, draftProgramName.value.trim())
         }
-        await splitStore.syncSplitDays(targetSplit.value.id, draftDays.value)
+        await programStore.syncProgramDays(targetProgram.value.id, draftDays.value)
       }
       isDirty.value = false
       showSaveSuccessModal.value = true
@@ -236,16 +236,16 @@ const handleGoHome = () => {
   router.push('/')
 }
 
-const deleteSplit = () => {
-  showDeleteSplitModal.value = true
+const deleteProgram = () => {
+  showDeleteProgramModal.value = true
 }
 
-const handleDeleteSplitConfirm = async () => {
+const handleDeleteProgramConfirm = async () => {
   isDirty.value = false // Prevent leave guard
-  if (route.params.splitId === 'new') {
-    splitStore.draftSplit = null
+  if (route.params.programId === 'new') {
+    programStore.draftProgram = null
   } else {
-    await splitStore.deleteSplit(targetSplit.value.id)
+    await programStore.deleteProgram(targetProgram.value.id)
   }
   router.push('/')
 }
@@ -293,18 +293,18 @@ const getMuscleGroupColor = (group) => {
         </div>
       </div>
 
-      <div class="builder-content-wrapper" v-else-if="targetSplit" key="content">
+      <div class="builder-content-wrapper" v-else-if="targetProgram" key="content">
         <div class="header-row">
           <input 
-            class="split-name-input" 
-            v-model="draftSplitName" 
+            class="Program-name-input" 
+            v-model="draftProgramName" 
             @input="isDirty = true" 
             placeholder="Program Name" 
           />
         </div>
 
         <div class="builder-container">
-          <!-- Split Days Area -->
+          <!-- Program Days Area -->
           <TransitionGroup name="list-fade" tag="div" class="days-panel">
             <div v-for="day in localDays" :key="day.id" class="card day-card">
               <div class="day-header">
@@ -391,12 +391,12 @@ const getMuscleGroupColor = (group) => {
 
           <!-- Builder Actions — all three buttons together -->
           <div class="builder-actions" style="margin-top: -12px;">
-            <button class="builder-delete-btn" @click="deleteSplit" :title="route.params.splitId === 'new' ? 'Discard Draft' : 'Delete Program'">
+            <button class="builder-delete-btn" @click="deleteProgram" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
-              {{ route.params.splitId === 'new' ? 'Discard' : 'Delete' }}
+              {{ route.params.programId === 'new' ? 'Discard' : 'Delete' }}
             </button>
 
             <div class="builder-actions-divider"></div>
@@ -409,7 +409,7 @@ const getMuscleGroupColor = (group) => {
               Add Day
             </button>
 
-            <button class="builder-save-btn" @click="saveSplit" :disabled="!isDirty || isSaving" :class="{ 'builder-save-btn--active': isDirty }">
+            <button class="builder-save-btn" @click="saveProgram" :disabled="!isDirty || isSaving" :class="{ 'builder-save-btn--active': isDirty }">
               <div v-if="isSaving" class="spinner button-spinner"></div>
               <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -422,7 +422,7 @@ const getMuscleGroupColor = (group) => {
         </div>
       </div>
 
-      <div v-else-if="!route.params.splitId || route.params.splitId === 'new'" class="empty-state" key="empty">
+      <div v-else-if="!route.params.programId || route.params.programId === 'new'" class="empty-state" key="empty">
         <p>No active program or draft found. Please select or create one.</p>
         <div style="display: flex; gap: 12px; justify-content: center; margin-top: 16px;">
           <router-link to="/" class="btn-secondary tap-target inline-flex no-underline">Go to Home</router-link>
@@ -469,12 +469,12 @@ const getMuscleGroupColor = (group) => {
     />
 
     <AppModal 
-      v-model:show="showDeleteSplitModal" 
-      :title="deleteSplitModalTitle" 
-      :message="deleteSplitModalMessage" 
+      v-model:show="showDeleteProgramModal" 
+      :title="deleteProgramModalTitle" 
+      :message="deleteProgramModalMessage" 
       type="confirm" 
-      :confirm-text="deleteSplitConfirmText" 
-      @confirm="handleDeleteSplitConfirm" 
+      :confirm-text="deleteProgramConfirmText" 
+      @confirm="handleDeleteProgramConfirm" 
     />
 
     <AppModal 

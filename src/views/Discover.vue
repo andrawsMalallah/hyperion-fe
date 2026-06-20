@@ -11,17 +11,17 @@ const searchQuery = computed({
   get: () => discoverStore.searchQuery,
   set: (val) => { discoverStore.searchQuery = val }
 })
-const splits = computed(() => discoverStore.discoverSplits)
+const programs = computed(() => discoverStore.discoverprograms)
 const loading = computed(() => discoverStore.discoverLoading)
 const hasMore = computed(() => discoverStore.discoverHasMore)
-const selectedSplit = ref(null)
+const selectedProgram = ref(null)
 const loaderRef = ref(null)
 let observer = null
 
 let searchTimeout = null
 
-async function fetchSplits(reset = false, isScroll = false) {
-  await discoverStore.fetchDiscoverSplits(reset, isScroll)
+async function fetchprograms(reset = false, isScroll = false) {
+  await discoverStore.fetchDiscoverprograms(reset, isScroll)
 }
 
 function onSearchInput() {
@@ -31,29 +31,29 @@ function onSearchInput() {
     return
   }
   searchTimeout = setTimeout(() => {
-    fetchSplits(true, false)
+    fetchprograms(true, false)
   }, 1500)
 }
 
 function clearSearch() {
   searchQuery.value = ''
-  fetchSplits(true, false)
+  fetchprograms(true, false)
 }
 
-function getTotalExercises(split) {
-  if (!split.days) return 0
-  return split.days.reduce((acc, day) => acc + (day.exercises?.length || 0), 0)
+function getTotalExercises(Program) {
+  if (!Program.days) return 0
+  return Program.days.reduce((acc, day) => acc + (day.exercises?.length || 0), 0)
 }
 
-function openModal(split) {
-  selectedSplit.value = split
+function openModal(Program) {
+  selectedProgram.value = Program
 }
 
 function closeModal() {
-  selectedSplit.value = null
+  selectedProgram.value = null
 }
 
-watch(selectedSplit, (newVal) => {
+watch(selectedProgram, (newVal) => {
   if (newVal) {
     document.documentElement.classList.add('modal-open')
     document.body.classList.add('modal-open')
@@ -66,7 +66,7 @@ watch(selectedSplit, (newVal) => {
 function setupObserver() {
   observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && !loading.value && hasMore.value) {
-      fetchSplits(false, true)
+      fetchprograms(false, true)
     }
   }, { rootMargin: '100px' })
 
@@ -76,7 +76,7 @@ function setupObserver() {
 }
 
 onMounted(async () => {
-  await fetchSplits(false, false)
+  await fetchprograms(false, false)
   setupObserver()
 })
 
@@ -125,16 +125,16 @@ onUnmounted(() => {
     </div>
 
     <!-- Loading Skeleton (Initial Load) -->
-    <div v-if="loading && splits.length === 0" class="splits-grid">
-      <div v-for="n in 6" :key="n" class="card discover-split-card skeleton-pulse" style="min-height: 120px;">
-        <div class="split-card-header pb-12" style="border-bottom: 1px solid var(--border-color); width: 100%;">
-          <div class="split-title-container" style="width: 70%;">
+    <div v-if="loading && programs.length === 0" class="programs-grid">
+      <div v-for="n in 6" :key="n" class="card discover-Program-card skeleton-pulse" style="min-height: 120px;">
+        <div class="Program-card-header pb-12" style="border-bottom: 1px solid var(--border-color); width: 100%;">
+          <div class="Program-title-container" style="width: 70%;">
             <div class="skeleton-bar title-bar" style="width: 80%; height: 18px; margin-bottom: 8px;"></div>
             <div class="skeleton-bar text-bar" style="width: 40%; height: 12px;"></div>
           </div>
           <div class="skeleton-circle-btn" style="width: 32px; height: 32px; border-radius: 50%;"></div>
         </div>
-        <div class="split-summary-info mt-12" style="display: flex; gap: 8px;">
+        <div class="Program-summary-info mt-12" style="display: flex; gap: 8px;">
           <div class="skeleton-bar text-bar" style="width: 50px; height: 14px;"></div>
           <span class="summary-dot">•</span>
           <div class="skeleton-bar text-bar" style="width: 60px; height: 14px;"></div>
@@ -142,15 +142,15 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Splits Grid List -->
-    <TransitionGroup name="list-fade" tag="div" class="splits-grid" v-else-if="splits.length > 0">
-      <div v-for="split in splits" :key="split.id" class="card discover-split-card">
-        <div class="split-card-header">
-          <div class="split-title-container">
-            <h3 class="split-title m-0">{{ split.split_name }}</h3>
-            <span class="split-creator" v-if="split.user?.name">by {{ split.user.name }}</span>
+    <!-- programs Grid List -->
+    <TransitionGroup name="list-fade" tag="div" class="programs-grid" v-else-if="programs.length > 0">
+      <div v-for="Program in programs" :key="Program.id" class="card discover-Program-card">
+        <div class="Program-card-header">
+          <div class="Program-title-container">
+            <h3 class="Program-title m-0">{{ Program.name }}</h3>
+            <span class="Program-creator" v-if="Program.user?.name">by {{ Program.user.name }}</span>
           </div>
-          <button class="eye-btn tap-target" @click="openModal(split)" title="View Details">
+          <button class="eye-btn tap-target" @click="openModal(Program)" title="View Details">
             <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
@@ -158,15 +158,15 @@ onUnmounted(() => {
           </button>
         </div>
         
-        <div class="split-divider"></div>
+        <div class="Program-divider"></div>
         
-        <div class="split-summary-info">
+        <div class="Program-summary-info">
           <span class="summary-item">
-            <strong>{{ split.days?.length || 0 }}</strong> {{ (split.days?.length === 1) ? 'Day' : 'Days' }}
+            <strong>{{ Program.days?.length || 0 }}</strong> {{ (Program.days?.length === 1) ? 'Day' : 'Days' }}
           </span>
           <span class="summary-dot">•</span>
           <span class="summary-item">
-            <strong>{{ getTotalExercises(split) }}</strong> {{ (getTotalExercises(split) === 1) ? 'Exercise' : 'Exercises' }}
+            <strong>{{ getTotalExercises(Program) }}</strong> {{ (getTotalExercises(Program) === 1) ? 'Exercise' : 'Exercises' }}
           </span>
         </div>
       </div>
@@ -179,27 +179,27 @@ onUnmounted(() => {
 
     <!-- Loading Spinner / Footer -->
     <div class="footer-loader" ref="loaderRef" style="display: flex; justify-content: center; align-items: center; min-height: 45px; box-sizing: border-box; margin-top: 16px;">
-      <div v-if="loading && splits.length > 0" class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
-      <div v-else-if="!hasMore && splits.length > 0" class="end-message" style="margin: 0;">
+      <div v-if="loading && programs.length > 0" class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
+      <div v-else-if="!hasMore && programs.length > 0" class="end-message" style="margin: 0;">
         No more data to display
       </div>
     </div>
 
     <!-- Detail Modal (Premium Overlay) -->
     <AppModal 
-      v-model:show="selectedSplit"
+      v-model:show="selectedProgram"
       type="custom"
       maxWidth="500px"
       @cancel="closeModal"
     >
       <template #header>
         <div class="modal-title-box">
-          <h2 class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ selectedSplit.split_name }}</h2>
-          <span class="modal-creator-tag" v-if="selectedSplit.user?.name">Created by {{ selectedSplit.user.name }}</span>
+          <h2 class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ selectedProgram.name }}</h2>
+          <span class="modal-creator-tag" v-if="selectedProgram.user?.name">Created by {{ selectedProgram.user.name }}</span>
         </div>
       </template>
 
-      <div v-for="day in selectedSplit.days" :key="day.id" class="modal-day-section">
+      <div v-for="day in selectedProgram.days" :key="day.id" class="modal-day-section">
         <h3 class="modal-day-title">{{ day.day_name }}</h3>
         
         <ul v-if="day.exercises && day.exercises.length > 0" class="modal-exercises-list">
@@ -217,7 +217,7 @@ onUnmounted(() => {
         </div>
       </div>
       
-      <div v-if="selectedSplit.days?.length === 0" class="modal-empty-days">
+      <div v-if="selectedProgram.days?.length === 0" class="modal-empty-days">
         No days added to this program yet.
       </div>
     </AppModal>
@@ -288,14 +288,14 @@ onUnmounted(() => {
   background-color: var(--bg-surface-hover);
 }
 
-.splits-grid {
+.programs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
   margin-bottom: 24px;
 }
 
-.discover-split-card {
+.discover-Program-card {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color);
@@ -304,27 +304,27 @@ onUnmounted(() => {
   transition: all 0.25s ease;
 }
 
-.discover-split-card:hover {
+.discover-Program-card:hover {
   transform: translateY(-2px);
   border-color: var(--primary-accent);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
-.split-card-header {
+.Program-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   width: 100%;
 }
 
-.split-title-container {
+.Program-title-container {
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-width: 80%;
 }
 
-.split-title {
+.Program-title {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
@@ -333,7 +333,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.split-creator {
+.Program-creator {
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -364,13 +364,13 @@ onUnmounted(() => {
   transform: scale(0.98);
 }
 
-.split-divider {
+.Program-divider {
   height: 1px;
   background-color: var(--border-color);
   margin: 16px 0;
 }
 
-.split-summary-info {
+.Program-summary-info {
   display: flex;
   align-items: center;
   gap: 8px;

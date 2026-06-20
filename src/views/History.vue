@@ -24,7 +24,7 @@ const pastWorkouts = computed(() => {
   return [...rawLogs.value]
     .map(log => {
       const day = log.day
-      const split = day?.split
+      const Program = day?.Program
       
       const sets = log.sets || []
       const numExercises = new Set(sets.map(s => s.exercise_id)).size
@@ -51,7 +51,7 @@ const pastWorkouts = computed(() => {
         ...log,
         dateStr: new Date(log.date_timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
         dayName: day ? day.day_name : 'Unknown Day',
-        splitName: split ? split.split_name : 'Unknown Program',
+        ProgramName: Program ? Program.name : 'Unknown Program',
         totalVolume: sets.reduce((acc, s) => acc + (s.weight * s.reps), 0),
         numExercises,
         numSets: sets.length,
@@ -117,7 +117,7 @@ onUnmounted(() => {
         <div class="history-header pb-12">
           <div class="header-main-info">
             <h2 class="subtitle m-0 text-accent" style="font-weight: 700;">{{ w.dayName }}</h2>
-            <span class="history-split-tag">{{ w.splitName }}</span>
+            <span class="history-Program-tag">{{ w.ProgramName }}</span>
           </div>
           <span class="history-date-badge">{{ w.dateStr }}</span>
         </div>
@@ -206,7 +206,7 @@ onUnmounted(() => {
   gap: 4px;
 }
 
-.history-split-tag {
+.history-Program-tag {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;

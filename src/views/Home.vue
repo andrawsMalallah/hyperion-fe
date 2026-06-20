@@ -9,12 +9,12 @@ import PrimaryButton from '../components/PrimaryButton.vue'
 import { OverlayScrollbars } from 'overlayscrollbars'
 
 const router = useRouter()
-const splitStore = useProgramStore()
+const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const authStore = useAuthStore()
 
-const userSplits = computed(() => {
-  return [...splitStore.user_splits].sort((a, b) => {
+const userprograms = computed(() => {
+  return [...programStore.user_programs].sort((a, b) => {
     if (a.is_active === b.is_active) {
       const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -24,9 +24,9 @@ const userSplits = computed(() => {
   });
 })
 
-function getSplitDays(splitId) {
-  return splitStore.split_days
-    .filter(d => d.split_id === splitId)
+function getProgramDays(programId) {
+  return programStore.program_days
+    .filter(d => d.program_id === programId)
     .sort((a, b) => a.display_order - b.display_order)
 }
 
@@ -39,25 +39,25 @@ function getExerciseCount(day) {
   return day.exercises.length
 }
 
-const activeSplit = computed(() => splitStore.user_splits.find(s => s.is_active))
-const expandedSplitId = ref(null)
+const activeProgram = computed(() => programStore.user_programs.find(s => s.is_active))
+const expandedprogramId = ref(null)
 
-// Non-active splits computed for secondary lists
-const inactiveSplits = computed(() => {
-  return userSplits.value.filter(s => !s.is_active)
+// Non-active programs computed for secondary lists
+const inactiveprograms = computed(() => {
+  return userprograms.value.filter(s => !s.is_active)
 })
 
-watch(activeSplit, (newActive) => {
+watch(activeProgram, (newActive) => {
   if (newActive) {
-    expandedSplitId.value = newActive.id
+    expandedprogramId.value = newActive.id
   }
 }, { immediate: true })
 
-function toggleExpand(splitId) {
-  expandedSplitId.value = expandedSplitId.value === splitId ? null : splitId
+function toggleExpand(programId) {
+  expandedprogramId.value = expandedprogramId.value === programId ? null : programId
 }
 
-function makeActive(splitId) {
+function makeActive(programId) {
   // 1. Smooth scroll to top immediately
   const osInstance = OverlayScrollbars(document.body)
   if (osInstance) {
@@ -69,12 +69,12 @@ function makeActive(splitId) {
   
   // 2. Delay the active status update/reorder slightly for a smoother transition
   setTimeout(() => {
-    splitStore.setActiveSplit(splitId)
+    programStore.setActiveProgram(programId)
   }, 150)
 }
 
-function editSplit(splitId) {
-  router.push(`/builder/${splitId}`)
+function editProgram(programId) {
+  router.push(`/builder/${programId}`)
 }
 
 // Transition hooks to animate element height dynamically
@@ -115,7 +115,7 @@ function leave(el, done) {
 }
 
 onMounted(() => {
-  splitStore.fetchSplits()
+  programStore.fetchprograms()
   if (authStore.isAuthenticated && !authStore.user) {
     authStore.fetchUser()
   }
@@ -130,14 +130,14 @@ onMounted(() => {
         <h1 class="welcome-title">Hello, {{ authStore.user?.name || 'Athlete' }}!</h1>
         <p class="welcome-subtitle">Ready to log your training session today?</p>
       </div>
-      <div class="welcome-badge" v-if="activeSplit">
+      <div class="welcome-badge" v-if="activeProgram">
         <span class="active-label">Active Program</span>
-        <span class="active-name">{{ activeSplit.split_name }}</span>
+        <span class="active-name">{{ activeProgram.name }}</span>
       </div>
     </div>
 
     <!-- Loading Skeleton State -->
-    <div v-if="splitStore.loading && !splitStore.isListLoaded" class="dashboard-grid">
+    <div v-if="programStore.loading && !programStore.isListLoaded" class="dashboard-grid">
       <div class="grid-col-left">
         <div class="skeleton-card skeleton-pulse" style="height: 280px; margin-bottom: 24px;"></div>
       </div>
@@ -147,8 +147,8 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Empty State when no splits exist at all -->
-    <div v-else-if="splitStore.isListLoaded && userSplits.length === 0" class="card empty-state text-center py-40">
+    <!-- Empty State when no programs exist at all -->
+    <div v-else-if="programStore.isListLoaded && userprograms.length === 0" class="card empty-state text-center py-40">
       <div class="empty-icon mb-16">⚡</div>
       <h3 class="subtitle" style="color: var(--text-primary);">No Workout Programs Yet</h3>
       <p class="mb-24" style="color: var(--text-secondary); max-width: 400px; margin-left: auto; margin-right: auto;">
@@ -161,16 +161,16 @@ onMounted(() => {
 
     <!-- Real Dashboard Layout Grid -->
     <div v-else class="dashboard-grid">
-      <!-- Left Column: Active Split Focus -->
+      <!-- Left Column: Active Program Focus -->
       <div class="grid-col-left">
         <div class="section-header-compact mb-12">
           <h2 class="section-title-small">Active Program</h2>
         </div>
 
-        <div v-if="activeSplit" class="active-split-showcase card">
+        <div v-if="activeProgram" class="active-Program-showcase card">
           <div class="showcase-header">
-            <h3 class="showcase-title">{{ activeSplit.split_name }}</h3>
-            <button class="btn-secondary tap-target edit-shortcut-btn" @click="editSplit(activeSplit.id)" title="Edit Program">
+            <h3 class="showcase-title">{{ activeProgram.name }}</h3>
+            <button class="btn-secondary tap-target edit-shortcut-btn" @click="editProgram(activeProgram.id)" title="Edit Program">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -179,7 +179,7 @@ onMounted(() => {
           </div>
 
           <div class="showcase-days-list mt-16">
-            <div v-for="day in getSplitDays(activeSplit.id)" :key="day.id" class="showcase-day-row">
+            <div v-for="day in getProgramDays(activeProgram.id)" :key="day.id" class="showcase-day-row">
               <div class="day-details">
                 <span class="showcase-day-name">{{ day.day_name }}</span>
                 <span class="showcase-day-exercises">{{ getExerciseCount(day) }} exercises</span>
@@ -192,7 +192,7 @@ onMounted(() => {
               </PrimaryButton>
             </div>
             
-            <div v-if="getSplitDays(activeSplit.id).length === 0" class="empty-state text-center py-16" style="border: 1px dashed var(--border-color); border-radius: 8px;">
+            <div v-if="getProgramDays(activeProgram.id).length === 0" class="empty-state text-center py-16" style="border: 1px dashed var(--border-color); border-radius: 8px;">
               No days added to this program yet. Click edit shortcut to build it.
             </div>
           </div>
@@ -209,43 +209,43 @@ onMounted(() => {
           <h2 class="section-title-small">Saved Programs</h2>
         </div>
 
-        <!-- Scrollable Splits List -->
-        <TransitionGroup name="splits-reorder" tag="div" class="splits-list mb-24">
+        <!-- Scrollable programs List -->
+        <TransitionGroup name="programs-reorder" tag="div" class="programs-list mb-24">
           <div 
-            v-for="split in inactiveSplits" 
-            :key="split.id" 
-            class="split-card card" 
-            :class="{ 'is-expanded': expandedSplitId === split.id }" 
-            @click="toggleExpand(split.id)"
+            v-for="Program in inactiveprograms" 
+            :key="Program.id" 
+            class="Program-card card" 
+            :class="{ 'is-expanded': expandedprogramId === Program.id }" 
+            @click="toggleExpand(Program.id)"
           >
-            <div class="split-card-header">
-              <h3 class="split-title">{{ split.split_name }}</h3>
-              <span class="expand-hint">{{ getSplitDays(split.id).length }} days</span>
+            <div class="Program-card-header">
+              <h3 class="Program-title">{{ Program.name }}</h3>
+              <span class="expand-hint">{{ getProgramDays(Program.id).length }} days</span>
             </div>
             
             <Transition
-              name="split-expand"
+              name="Program-expand"
               @before-enter="beforeEnter"
               @enter="enter"
               @after-enter="afterEnter"
               @before-leave="beforeLeave"
               @leave="leave"
             >
-              <div v-if="expandedSplitId === split.id" class="days-list" @click.stop>
-                <div v-for="(day, idx) in getSplitDays(split.id)" :key="day.id" class="day-row" :style="{ transitionDelay: idx * 40 + 'ms' }">
+              <div v-if="expandedprogramId === Program.id" class="days-list" @click.stop>
+                <div v-for="(day, idx) in getProgramDays(Program.id)" :key="day.id" class="day-row" :style="{ transitionDelay: idx * 40 + 'ms' }">
                   <div class="day-info">
                     <span class="day-name">{{ day.day_name }}</span>
                     <span class="day-exercises">{{ getExerciseCount(day) }} exercises</span>
                   </div>
                 </div>
                 
-                <div v-if="getSplitDays(split.id).length === 0" class="empty-state empty-days-hint py-8 text-center" style="border: 1px dashed var(--border-color); border-radius: 8px; font-size: 13px;">
+                <div v-if="getProgramDays(Program.id).length === 0" class="empty-state empty-days-hint py-8 text-center" style="border: 1px dashed var(--border-color); border-radius: 8px; font-size: 13px;">
                   No days added yet.
                 </div>
                 
                 <div class="flex-row gap-12 mt-16">
-                  <PrimaryButton class="px-16 h-36" style="font-size: 13px;" @click="makeActive(split.id)">Make Active</PrimaryButton>
-                  <button class="btn-secondary tap-target px-16 h-36" style="font-size: 13px;" @click="editSplit(split.id)">Edit</button>
+                  <PrimaryButton class="px-16 h-36" style="font-size: 13px;" @click="makeActive(Program.id)">Make Active</PrimaryButton>
+                  <button class="btn-secondary tap-target px-16 h-36" style="font-size: 13px;" @click="editProgram(Program.id)">Edit</button>
                 </div>
               </div>
             </Transition>
@@ -253,7 +253,7 @@ onMounted(() => {
         </TransitionGroup>
 
         <!-- Quick Action: Create Card -->
-        <router-link to="/create" class="card create-split-card no-underline mb-24">
+        <router-link to="/create" class="card create-Program-card no-underline mb-24">
           <div class="create-card-content">
             <div class="create-icon-circle">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -262,7 +262,7 @@ onMounted(() => {
               </svg>
             </div>
             <div class="create-text">
-              <span class="create-title-text">Create Workout Split</span>
+              <span class="create-title-text">Create Workout Program</span>
               <span class="create-desc-text">Build a custom multi-day routine</span>
             </div>
           </div>
@@ -372,7 +372,7 @@ onMounted(() => {
   margin: 0;
 }
 
-.active-split-showcase {
+.active-Program-showcase {
   border: 1px solid var(--border-color);
   padding: 24px;
 }
@@ -460,36 +460,36 @@ onMounted(() => {
   transform: translateX(2px);
 }
 
-.splits-list {
+.programs-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.split-card {
+.Program-card {
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   padding: 16px;
 }
 
-.split-card:hover {
+.Program-card:hover {
   border-color: #555;
   background-color: rgba(255, 255, 255, 0.01);
 }
 
-.split-card.is-expanded {
+.Program-card.is-expanded {
   background-color: rgba(255, 255, 255, 0.015);
   border-color: #444;
 }
 
-.split-card-header {
+.Program-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.split-title {
+.Program-title {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
@@ -546,7 +546,7 @@ onMounted(() => {
   padding-right: 16px !important;
 }
 
-.create-split-card {
+.create-Program-card {
   border: 1px dashed var(--text-secondary);
   background: transparent;
   cursor: pointer;
@@ -555,13 +555,13 @@ onMounted(() => {
   padding: 20px;
 }
 
-.create-split-card:hover {
+.create-Program-card:hover {
   border-color: var(--primary-accent);
   background-color: rgba(204, 255, 0, 0.02);
   transform: translateY(-2px);
 }
 
-.create-split-card:active {
+.create-Program-card:active {
   transform: translateY(0);
 }
 
@@ -584,7 +584,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.create-split-card:hover .create-icon-circle {
+.create-Program-card:hover .create-icon-circle {
   border-color: var(--primary-accent);
   color: var(--primary-accent);
   background-color: rgba(204, 255, 0, 0.05);
@@ -632,19 +632,19 @@ onMounted(() => {
   100% { opacity: 0.6; }
 }
 
-.splits-reorder-move {
+.programs-reorder-move {
   transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.splits-reorder-enter-active,
-.splits-reorder-leave-active {
+.programs-reorder-enter-active,
+.programs-reorder-leave-active {
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.splits-reorder-enter-from,
-.splits-reorder-leave-to {
+.programs-reorder-enter-from,
+.programs-reorder-leave-to {
   opacity: 0;
   transform: translateY(12px);
 }
-.splits-reorder-leave-active {
+.programs-reorder-leave-active {
   position: absolute;
   width: 100%;
 }

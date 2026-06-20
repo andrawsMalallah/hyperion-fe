@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import api from '../api'
 import { useExerciseStore } from './exercise'
 
-export const FAMOUS_SPLITS = [
+export const FAMOUS_programs = [
   {
     id: 'tpl-ppl',
     name: 'Push / Pull / Legs',
@@ -12,7 +12,7 @@ export const FAMOUS_SPLITS = [
   },
   {
     id: 'tpl-bro',
-    name: 'Bro Split',
+    name: 'Bro Program',
     description: '5-day program hitting one muscle group per day.',
     days: ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms']
   },
@@ -31,31 +31,31 @@ export const FAMOUS_SPLITS = [
 ]
 
 export const useProgramStore = defineStore('program', () => {
-  const user_splits = ref([])
-  const split_days = ref([])
+  const user_programs = ref([])
+  const program_days = ref([])
   const loading = ref(false)
-  const draftSplit = ref(null)
-  const fetchedSplitIds = ref(new Set())
+  const draftProgram = ref(null)
+  const fetchedprogramIds = ref(new Set())
   const isListLoaded = ref(false)
 
-  async function fetchSplits(force = false) {
+  async function fetchprograms(force = false) {
     if (!force && isListLoaded.value) return
     loading.value = true
     try {
-      const response = await api.get('/splits')
-      const splitsData = response.data.data
+      const response = await api.get('/programs')
+      const programsData = response.data.data
       
-      user_splits.value = splitsData.map(s => ({
+      user_programs.value = programsData.map(s => ({
         id: s.id,
-        split_name: s.split_name,
+        name: s.name,
         is_active: s.is_active,
         created_at: s.created_at
       }))
       
       const exerciseStore = useExerciseStore()
       let allDays = []
-      splitsData.forEach(s => {
-        fetchedSplitIds.value.add(String(s.id))
+      programsData.forEach(s => {
+        fetchedprogramIds.value.add(String(s.id))
         
         s.days.forEach(d => {
           d.exercises.forEach(e => {
@@ -66,14 +66,14 @@ export const useProgramStore = defineStore('program', () => {
           
           allDays.push({
             id: d.id,
-            split_id: s.id,
+            program_id: s.id,
             day_name: d.day_name,
             display_order: d.display_order,
             exercises: d.exercises.map(e => e.id)
           })
         })
       })
-      split_days.value = allDays
+      program_days.value = allDays
       isListLoaded.value = true
     } catch (e) {
       console.error(e);
@@ -82,29 +82,29 @@ export const useProgramStore = defineStore('program', () => {
     }
   }
 
-  async function fetchSingleSplit(splitId, force = false) {
-    const idStr = String(splitId)
-    if (!force && fetchedSplitIds.value.has(idStr)) return
+  async function fetchSingleProgram(programId, force = false) {
+    const idStr = String(programId)
+    if (!force && fetchedprogramIds.value.has(idStr)) return
     
     loading.value = true
     try {
-      const response = await api.get(`/splits/${splitId}`)
+      const response = await api.get(`/programs/${programId}`)
       const s = response.data.data
       
-      const idx = user_splits.value.findIndex(item => String(item.id) === String(s.id))
-      const splitMeta = {
+      const idx = user_programs.value.findIndex(item => String(item.id) === String(s.id))
+      const ProgramMeta = {
         id: s.id,
-        split_name: s.split_name,
+        name: s.name,
         is_active: s.is_active,
         created_at: s.created_at
       }
       if (idx !== -1) {
-        user_splits.value[idx] = splitMeta
+        user_programs.value[idx] = ProgramMeta
       } else {
-        user_splits.value.push(splitMeta)
+        user_programs.value.push(ProgramMeta)
       }
       
-      split_days.value = split_days.value.filter(d => String(d.split_id) !== String(s.id))
+      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(s.id))
       
       const exerciseStore = useExerciseStore()
       s.days.forEach(d => {
@@ -114,16 +114,16 @@ export const useProgramStore = defineStore('program', () => {
           }
         })
         
-        split_days.value.push({
+        program_days.value.push({
           id: d.id,
-          split_id: s.id,
+          program_id: s.id,
           day_name: d.day_name,
           display_order: d.display_order,
           exercises: d.exercises.map(e => e.id)
         })
       })
       
-      fetchedSplitIds.value.add(idStr)
+      fetchedprogramIds.value.add(idStr)
     } catch (e) {
       console.error(e)
     } finally {
@@ -131,28 +131,28 @@ export const useProgramStore = defineStore('program', () => {
     }
   }
 
-  async function fetchSingleSplitByDay(dayId) {
-    if (split_days.value.some(d => String(d.id) === String(dayId))) return
+  async function fetchSingleProgramByDay(dayId) {
+    if (program_days.value.some(d => String(d.id) === String(dayId))) return
     
     loading.value = true
     try {
-      const response = await api.get(`/splits/by-day/${dayId}`)
+      const response = await api.get(`/programs/by-day/${dayId}`)
       const s = response.data.data
       
-      const idx = user_splits.value.findIndex(item => String(item.id) === String(s.id))
-      const splitMeta = {
+      const idx = user_programs.value.findIndex(item => String(item.id) === String(s.id))
+      const ProgramMeta = {
         id: s.id,
-        split_name: s.split_name,
+        name: s.name,
         is_active: s.is_active,
         created_at: s.created_at
       }
       if (idx !== -1) {
-        user_splits.value[idx] = splitMeta
+        user_programs.value[idx] = ProgramMeta
       } else {
-        user_splits.value.push(splitMeta)
+        user_programs.value.push(ProgramMeta)
       }
       
-      split_days.value = split_days.value.filter(d => String(d.split_id) !== String(s.id))
+      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(s.id))
       
       const exerciseStore = useExerciseStore()
       s.days.forEach(d => {
@@ -162,16 +162,16 @@ export const useProgramStore = defineStore('program', () => {
           }
         })
         
-        split_days.value.push({
+        program_days.value.push({
           id: d.id,
-          split_id: s.id,
+          program_id: s.id,
           day_name: d.day_name,
           display_order: d.display_order,
           exercises: d.exercises.map(e => e.id)
         })
       })
       
-      fetchedSplitIds.value.add(String(s.id))
+      fetchedprogramIds.value.add(String(s.id))
     } catch (e) {
       console.error(e)
     } finally {
@@ -179,30 +179,30 @@ export const useProgramStore = defineStore('program', () => {
     }
   }
 
-  async function setActiveSplit(splitId) {
-    const originalSplits = JSON.parse(JSON.stringify(user_splits.value))
+  async function setActiveProgram(programId) {
+    const originalprograms = JSON.parse(JSON.stringify(user_programs.value))
 
     // Optimistically update local active states instantly
-    user_splits.value.forEach(s => {
-      s.is_active = (String(s.id) === String(splitId))
+    user_programs.value.forEach(s => {
+      s.is_active = (String(s.id) === String(programId))
     })
 
     try {
-      await api.put(`/splits/${splitId}`, { is_active: true })
+      await api.put(`/programs/${programId}`, { is_active: true })
     } catch (e) {
-      console.error("Failed to set active split on server, rolling back:", e)
-      user_splits.value = originalSplits
+      console.error("Failed to set active Program on server, rolling back:", e)
+      user_programs.value = originalprograms
     }
   }
 
   function initDraftFromTemplate(template) {
-    draftSplit.value = {
+    draftProgram.value = {
       id: 'draft',
-      split_name: template.name,
+      name: template.name,
       is_active: true,
       days: template.days.map((dayName, index) => ({
         id: 'day-draft-' + Date.now() + '-' + index,
-        split_id: 'draft',
+        program_id: 'draft',
         day_name: dayName,
         display_order: index + 1,
         exercises: []
@@ -211,19 +211,19 @@ export const useProgramStore = defineStore('program', () => {
   }
 
   function initDraftCustom(name) {
-    draftSplit.value = {
+    draftProgram.value = {
       id: 'draft',
-      split_name: name || 'Custom Program',
+      name: name || 'Custom Program',
       is_active: true,
       days: []
     }
   }
 
-  async function saveNewSplit(draftSplitData) {
+  async function saveNewProgram(draftProgramData) {
     const payload = {
-      split_name: draftSplitData.split_name,
+      name: draftProgramData.name,
       is_active: false,
-      days: draftSplitData.days.map((d, index) => ({
+      days: draftProgramData.days.map((d, index) => ({
         day_name: d.day_name,
         display_order: index + 1,
         exercises: d.exercises.map(exId => ({ exercise_id: exId }))
@@ -231,23 +231,23 @@ export const useProgramStore = defineStore('program', () => {
     }
 
     try {
-      const response = await api.post('/splits', payload)
-      const newSplit = response.data.data
+      const response = await api.post('/programs', payload)
+      const newProgram = response.data.data
       
-      user_splits.value.push({
-        id: newSplit.id,
-        split_name: newSplit.split_name,
-        is_active: newSplit.is_active,
-        created_at: newSplit.created_at
+      user_programs.value.push({
+        id: newProgram.id,
+        name: newProgram.name,
+        is_active: newProgram.is_active,
+        created_at: newProgram.created_at
       })
 
-      fetchedSplitIds.value.add(String(newSplit.id))
+      fetchedprogramIds.value.add(String(newProgram.id))
 
-      if (newSplit.days) {
-        newSplit.days.forEach(d => {
-          split_days.value.push({
+      if (newProgram.days) {
+        newProgram.days.forEach(d => {
+          program_days.value.push({
             id: d.id,
-            split_id: newSplit.id,
+            program_id: newProgram.id,
             day_name: d.day_name,
             display_order: d.display_order,
             exercises: d.exercises ? d.exercises.map(e => e.id) : []
@@ -255,22 +255,22 @@ export const useProgramStore = defineStore('program', () => {
         })
       }
 
-      draftSplit.value = null
-      return newSplit.id
+      draftProgram.value = null
+      return newProgram.id
     } catch (e) {
       console.error(e)
       throw e
     }
   }
 
-  function addDayToSplit(splitId, dayName) {
-    // Modify locally. User must hit "Save Split" to persist to DB.
-    const daysInSplit = split_days.value.filter(d => d.split_id === splitId)
-    const newOrder = daysInSplit.length > 0 ? Math.max(...daysInSplit.map(d => d.display_order)) + 1 : 1
+  function addDayToProgram(programId, dayName) {
+    // Modify locally. User must hit "Save Program" to persist to DB.
+    const daysInProgram = program_days.value.filter(d => d.program_id === programId)
+    const newOrder = daysInProgram.length > 0 ? Math.max(...daysInProgram.map(d => d.display_order)) + 1 : 1
     
-    split_days.value.push({
+    program_days.value.push({
       id: 'local-' + Date.now(),
-      split_id: splitId,
+      program_id: programId,
       day_name: dayName,
       display_order: newOrder,
       exercises: []
@@ -278,42 +278,42 @@ export const useProgramStore = defineStore('program', () => {
   }
 
   function deleteDay(dayId) {
-    split_days.value = split_days.value.filter(d => d.id !== dayId)
+    program_days.value = program_days.value.filter(d => d.id !== dayId)
   }
 
-  async function deleteSplit(splitId) {
+  async function deleteProgram(programId) {
     try {
-      await api.delete(`/splits/${splitId}`)
+      await api.delete(`/programs/${programId}`)
       
-      user_splits.value = user_splits.value.filter(s => String(s.id) !== String(splitId))
-      split_days.value = split_days.value.filter(d => String(d.split_id) !== String(splitId))
-      fetchedSplitIds.value.delete(String(splitId))
+      user_programs.value = user_programs.value.filter(s => String(s.id) !== String(programId))
+      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(programId))
+      fetchedprogramIds.value.delete(String(programId))
     } catch (e) {
       console.error(e)
     }
   }
 
   function updateDayExercises(dayId, newExercisesArray) {
-    const day = split_days.value.find(d => d.id === dayId)
+    const day = program_days.value.find(d => d.id === dayId)
     if (day) {
       day.exercises = newExercisesArray
     }
   }
 
-  function renameSplit(splitId, newName) {
-    const split = user_splits.value.find(s => s.id === splitId)
-    if (split) {
-      split.split_name = newName
+  function renameProgram(programId, newName) {
+    const Program = user_programs.value.find(s => s.id === programId)
+    if (Program) {
+      Program.name = newName
     }
   }
 
-  async function syncSplitDays(splitId, draftDays) {
-    const split = user_splits.value.find(s => s.id === splitId)
-    if (!split) return;
+  async function syncProgramDays(programId, draftDays) {
+    const Program = user_programs.value.find(s => s.id === programId)
+    if (!Program) return;
 
     const payload = {
-      split_name: split.split_name,
-      is_active: split.is_active,
+      name: Program.name,
+      is_active: Program.is_active,
       days: draftDays.map((d, index) => {
         const payloadDay = {
           day_name: d.day_name,
@@ -329,32 +329,32 @@ export const useProgramStore = defineStore('program', () => {
     }
 
     try {
-      const response = await api.put(`/splits/${splitId}`, payload)
-      const updatedSplit = response.data.data
+      const response = await api.put(`/programs/${programId}`, payload)
+      const updatedProgram = response.data.data
       
-      split.split_name = updatedSplit.split_name
-      split.is_active = updatedSplit.is_active
+      Program.name = updatedProgram.name
+      Program.is_active = updatedProgram.is_active
       
-      split_days.value = split_days.value.filter(d => String(d.split_id) !== String(splitId))
+      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(programId))
       
       const exerciseStore = useExerciseStore()
-      updatedSplit.days.forEach(d => {
+      updatedProgram.days.forEach(d => {
         d.exercises.forEach(e => {
           if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
             exerciseStore.exercises.push(e)
           }
         })
         
-        split_days.value.push({
+        program_days.value.push({
           id: d.id,
-          split_id: updatedSplit.id,
+          program_id: updatedProgram.id,
           day_name: d.day_name,
           display_order: d.display_order,
           exercises: d.exercises.map(e => e.id)
         })
       })
       
-      fetchedSplitIds.value.add(String(splitId))
+      fetchedprogramIds.value.add(String(programId))
     } catch (e) {
       console.error(e)
       throw e
@@ -362,33 +362,33 @@ export const useProgramStore = defineStore('program', () => {
   }
 
   function reset() {
-    user_splits.value = []
-    split_days.value = []
-    draftSplit.value = null
-    fetchedSplitIds.value.clear()
+    user_programs.value = []
+    program_days.value = []
+    draftProgram.value = null
+    fetchedprogramIds.value.clear()
     isListLoaded.value = false
   }
 
   return { 
-    user_splits, 
-    split_days, 
+    user_programs, 
+    program_days, 
     loading,
-    draftSplit,
-    fetchedSplitIds,
+    draftProgram,
+    fetchedprogramIds,
     isListLoaded,
-    fetchSplits,
-    fetchSingleSplit,
-    fetchSingleSplitByDay,
-    setActiveSplit,
+    fetchprograms,
+    fetchSingleProgram,
+    fetchSingleProgramByDay,
+    setActiveProgram,
     initDraftFromTemplate,
     initDraftCustom,
-    saveNewSplit,
-    addDayToSplit,
+    saveNewProgram,
+    addDayToProgram,
     deleteDay,
-    deleteSplit,
+    deleteProgram,
     updateDayExercises,
-    renameSplit,
-    syncSplitDays,
+    renameProgram,
+    syncProgramDays,
     reset
   }
 })

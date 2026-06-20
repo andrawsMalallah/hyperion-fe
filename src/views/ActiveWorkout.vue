@@ -13,7 +13,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const splitStore = useProgramStore()
+const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const exerciseStore = useExerciseStore()
 const historyStore = useHistoryStore()
@@ -21,7 +21,7 @@ const historyStore = useHistoryStore()
 // If dayId isn't found locally, it's fine, we try to match it.
 // To handle the API type (it could be an integer ID now from the API)
 const parsedDayId = isNaN(Number(props.dayId)) ? props.dayId : Number(props.dayId);
-const day = computed(() => splitStore.split_days.find(d => d.id === parsedDayId))
+const day = computed(() => programStore.program_days.find(d => d.id === parsedDayId))
 
 // This is local component state to manage the UI structure
 const activeWorkoutSession = ref([])
@@ -41,7 +41,7 @@ const errorList = computed(() => {
 
 onMounted(async () => {
   pageLoading.value = true
-  await splitStore.fetchSingleSplitByDay(parsedDayId)
+  await programStore.fetchSingleProgramByDay(parsedDayId)
 
   if (workoutStore.activeWorkoutDayId !== parsedDayId) {
     workoutStore.startWorkout(parsedDayId)
@@ -377,9 +377,9 @@ async function saveWorkout() {
         </div>
       </div>
 
-      <div v-else-if="!splitStore.loading" class="card empty-state text-center py-24" style="margin-top: 16px;" key="empty">
+      <div v-else-if="!programStore.loading" class="card empty-state text-center py-24" style="margin-top: 16px;" key="empty">
         <p>There are no exercises added to this workout day yet. Please add some exercises first.</p>
-        <PrimaryButton :to="'/builder/' + (day?.split_id || '')" class="inline-flex no-underline mt-16" style="justify-content: center;">
+        <PrimaryButton :to="'/builder/' + (day?.program_id || '')" class="inline-flex no-underline mt-16" style="justify-content: center;">
           Go to Program Builder
         </PrimaryButton>
       </div>

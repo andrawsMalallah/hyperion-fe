@@ -2,7 +2,8 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'https://hyperion-api-m4ze.onrender.com/api',
-  headers: {
+  // baseURL: 'http://localhost:8000/api',
+  headers: { 
     'Accept': 'application/json',
     'Content-Type': 'application/json'
   }

@@ -1,14 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useProgramStore, FAMOUS_SPLITS } from '../stores/program'
+import { useProgramStore, FAMOUS_programs } from '../stores/program'
 import AppModal from '../components/AppModal.vue'
 
 const router = useRouter()
-const splitStore = useProgramStore()
+const programStore = useProgramStore()
 
 function selectTemplate(template) {
-  splitStore.initDraftFromTemplate(template)
+  programStore.initDraftFromTemplate(template)
   router.push('/builder/new')
 }
 
@@ -18,9 +18,9 @@ function createCustom() {
   showModal.value = true
 }
 
-function handleCustomSplit(name) {
+function handleCustomProgram(name) {
   if (name) {
-    splitStore.initDraftCustom(name.trim() || "Custom Split")
+    programStore.initDraftCustom(name.trim() || "Custom Program")
     router.push('/builder/new')
   }
 }
@@ -62,7 +62,7 @@ function handleCustomSplit(name) {
 
         <!-- Famous Routine Templates -->
         <div 
-          v-for="tpl in FAMOUS_SPLITS" 
+          v-for="tpl in FAMOUS_programs" 
           :key="tpl.id" 
           class="template-card tap-target tpl-card" 
           @click="selectTemplate(tpl)"
@@ -89,7 +89,7 @@ function handleCustomSplit(name) {
       type="prompt" 
       default-value="My Custom Program" 
       confirm-text="Create" 
-      @confirm="handleCustomSplit" 
+      @confirm="handleCustomProgram" 
     />
   </div>
 </template>
