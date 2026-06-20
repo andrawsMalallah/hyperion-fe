@@ -163,11 +163,6 @@ const exerciseHistory = computed(() => {
 const showLeaveModal = ref(false)
 const nextRoute = ref(null)
 const isLeaving = ref(false)
-const showSaveSuccessModal = ref(false)
-
-const handleGoHome = () => {
-  router.push('/')
-}
 
 const hasChanges = computed(() => {
   return activeWorkoutSession.value.some(ex => ex.sets.some(s => s.completed))
@@ -209,7 +204,7 @@ async function saveWorkout() {
     await workoutStore.finishWorkout()
     isLeaving.value = true
     isSaving.value = false
-    showSaveSuccessModal.value = true
+    router.push('/')
   } catch (error) {
     isSaving.value = false
     isLeaving.value = false
@@ -403,17 +398,6 @@ async function saveWorkout() {
       confirm-text="Leave" 
       cancel-text="Stay" 
       @confirm="confirmLeave" 
-    />
-
-    <!-- Save Success Modal -->
-    <AppModal 
-      v-model:show="showSaveSuccessModal" 
-      title="Workout Saved" 
-      message="Your workout has been saved successfully. Would you like to stay or return home?" 
-      type="confirm" 
-      confirm-text="Go Home" 
-      cancel-text="Stay"
-      @confirm="handleGoHome" 
     />
 
     <!-- Exercise History Modal -->
