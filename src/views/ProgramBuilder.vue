@@ -296,7 +296,7 @@ const getMuscleGroupColor = (group) => {
       <div class="builder-content-wrapper" v-else-if="targetProgram" key="content">
         <div class="header-row">
           <input 
-            class="Program-name-input" 
+            class="program-name-input" 
             v-model="draftProgramName" 
             @input="isDirty = true" 
             placeholder="Program Name" 

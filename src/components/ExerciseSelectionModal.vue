@@ -96,6 +96,11 @@ function onSearchInput() {
   }, 1500)
 }
 
+const clearSearch = () => {
+  searchQuery.value = ''
+  onSearchInput()
+}
+
 watch(() => props.show, async (newVal) => {
   if (newVal) {
     document.documentElement.classList.add('modal-open')
@@ -129,12 +134,24 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <input 
-          v-model="searchQuery" 
-          @input="onSearchInput"
-          class="input-large search-input" 
-          placeholder="Search exercises..." 
-        />
+        <div class="search-input-wrapper mb-16">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input 
+            v-model="searchQuery" 
+            @input="onSearchInput"
+            class="input-large search-bar-input" 
+            placeholder="Search exercises..." 
+          />
+          <button v-if="searchQuery" @click="clearSearch" class="clear-search-btn" title="Clear search">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
 
         <div class="modal-exercise-list" @scroll="handleScroll">
           <Transition name="page-fade" mode="out-in">

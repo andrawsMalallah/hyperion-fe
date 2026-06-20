@@ -240,54 +240,6 @@ onUnmounted(() => {
   transform: translateX(0);
 }
 
-.search-container {
-  width: 100%;
-}
-
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.search-icon {
-  position: absolute;
-  left: 16px;
-  color: var(--text-secondary);
-  pointer-events: none;
-}
-
-.search-bar-input {
-  width: 100%;
-  padding-left: 48px;
-  padding-right: 48px;
-  border-radius: 10px;
-}
-
-.clear-search-btn {
-  position: absolute;
-  right: 12px;
-  background: none;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background-color: rgba(255, 255, 255, 0.02);
-  transition: all 0.15s ease;
-}
-
-.clear-search-btn:hover {
-  color: var(--primary-accent);
-  border-color: var(--primary-accent);
-  background-color: var(--bg-surface-hover);
-}
-
 .programs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
