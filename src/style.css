@@ -1692,10 +1692,18 @@ input:checked+.slider:before {
   font-size: 24px;
   font-weight: 800;
   padding: 12px 16px;
-  border-color: transparent;
-  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  background-color: rgba(255, 255, 255, 0.05);
   width: 100%;
   border-radius: 12px;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.program-name-input:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .history-header {
