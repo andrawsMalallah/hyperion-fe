@@ -398,7 +398,7 @@ const getMuscleGroupColor = (group) => {
 
           <!-- Builder Actions — all three buttons together -->
           <div class="builder-actions" style="margin-top: -12px;">
-            <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
+            <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting || isSaving" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
               <div v-if="isDeleting" class="spinner button-spinner"></div>
               <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
