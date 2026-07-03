@@ -1,9 +1,10 @@
 import axios from 'axios';
 
+// Configured per environment: .env.development points at the local API,
+// .env.production at the deployed one. Override with VITE_API_URL.
 const api = axios.create({
-  baseURL: 'https://hyperion-api-m4ze.onrender.com/api',
-  // baseURL: 'http://localhost:8000/api',
-  headers: { 
+  baseURL: (import.meta.env.VITE_API_URL || 'https://hyperion-api-m4ze.onrender.com') + '/api',
+  headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
   }

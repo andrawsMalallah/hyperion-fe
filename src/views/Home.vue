@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useAuthStore } from '../stores/auth'
+import { useHistoryStore } from '../stores/history'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import AppModal from '../components/AppModal.vue'
 
@@ -13,6 +14,7 @@ const router = useRouter()
 const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const authStore = useAuthStore()
+const historyStore = useHistoryStore()
 
 const userprograms = computed(() => {
   return [...programStore.user_programs].sort((a, b) => {
@@ -67,6 +69,22 @@ function getExerciseCount(day) {
 
 const activeProgram = computed(() => programStore.user_programs.find(s => s.is_active))
 const expandedprogramId = ref(null)
+
+// Rotation cursor: the active program's least-recently-performed day.
+const nextUpDayId = computed(() => {
+  if (!activeProgram.value) return null
+  const days = getProgramDays(activeProgram.value.id)
+  if (days.length < 2 || historyStore.workout_logs.length === 0) return null
+  let best = null
+  for (const day of days) {
+    const lastLog = historyStore.workout_logs.find(l => l.program_day_id === day.id)
+    const lastAt = lastLog ? new Date(lastLog.date_timestamp).getTime() : 0
+    if (!best || lastAt < best.lastAt) {
+      best = { day, lastAt }
+    }
+  }
+  return best ? best.day.id : null
+})
 
 // Non-active programs computed for secondary lists
 const inactiveprograms = computed(() => {
@@ -141,7 +159,9 @@ function leave(el, done) {
 }
 
 onMounted(() => {
-  programStore.fetchprograms()
+  programStore.fetchPrograms()
+  // Needed for the "Up next" suggestion; cached after the first load.
+  historyStore.fetchHistory(false, false)
   if (authStore.isAuthenticated && !authStore.user) {
     authStore.fetchUser()
   }
@@ -224,7 +244,10 @@ onMounted(() => {
           <div class="showcase-days-list mt-16">
             <div v-for="day in getProgramDays(activeProgram.id)" :key="day.id" class="showcase-day-row">
               <div class="day-details">
-                <span class="showcase-day-name">{{ day.day_name }}</span>
+                <span class="showcase-day-name">
+                  {{ day.day_name }}
+                  <span v-if="day.id === nextUpDayId" class="next-up-badge">Up next</span>
+                </span>
                 <span class="showcase-day-exercises">{{ getExerciseCount(day) }} exercises</span>
               </div>
               <PrimaryButton class="showcase-start-btn" @click="startWorkout(day.id)">
@@ -546,6 +569,20 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.next-up-badge {
+  background-color: rgba(204, 255, 0, 0.12);
+  color: var(--primary-accent);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .showcase-day-exercises {

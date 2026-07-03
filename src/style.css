@@ -20,6 +20,13 @@
   box-sizing: border-box;
 }
 
+/* Keyboard focus must be visible on a dark surface. */
+:focus-visible {
+  outline: 2px solid var(--primary-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -145,37 +152,6 @@ body {
   background-color: #333333;
 }
 
-/* Checkbox specific styles for gym usage */
-.checkbox-large {
-  appearance: none;
-  width: 48px;
-  height: 48px;
-  border: 2px solid var(--border-color);
-  border-radius: 12px;
-  background-color: var(--bg-main);
-  cursor: pointer;
-  position: relative;
-  transition: background-color 0.2s, border-color 0.2s;
-  flex-shrink: 0;
-}
-
-.checkbox-large:checked {
-  background-color: var(--primary-accent);
-  border-color: var(--primary-accent);
-}
-
-.checkbox-large:checked::after {
-  content: '';
-  position: absolute;
-  left: 16px;
-  top: 8px;
-  width: 10px;
-  height: 20px;
-  border: solid #000;
-  border-width: 0 3px 3px 0;
-  transform: rotate(45deg);
-}
-
 .title {
   font-size: 24px;
   font-weight: 800;
@@ -256,19 +232,6 @@ body {
   transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* Scale effect for checkboxes */
-.checkbox-large {
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
-}
-
-.checkbox-large:hover {
-  border-color: var(--primary-accent);
-}
-
-.checkbox-large:active {
-  transform: scale(0.92);
-}
-
 /* Extracted from App.vue */
 .app-container {
   display: flex;
@@ -309,19 +272,6 @@ body {
 
 .nav-brand:active {
   transform: scale(0.98);
-}
-
-.nav-link {
-  color: var(--text-primary);
-  text-decoration: none;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 8px;
-  transition: background-color 0.2s;
-}
-
-.nav-link:hover {
-  background-color: var(--bg-surface-hover);
 }
 
 .app-content {
@@ -418,12 +368,6 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
-.text-btn {
-  padding: 4px 12px;
-  min-height: 32px;
-  font-size: 12px;
-}
-
 .sets-header {
   display: flex;
   margin-bottom: 8px;
@@ -511,10 +455,10 @@ body {
 }
 
 .btn-set-action {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   border-radius: 8px !important;
   padding: 0 !important;
   display: inline-flex !important;
@@ -562,74 +506,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.program-card {
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-surface);
-  cursor: pointer;
-  transition: border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
-              background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
-              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
-              transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.program-card:hover {
-  border-color: #555;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-.program-card.is-active {
-  border-color: var(--primary-accent);
-  background: linear-gradient(145deg, var(--bg-surface), #1e1e1e);
-  box-shadow: 0 10px 30px rgba(255, 214, 0, 0.08), 0 4px 15px rgba(0, 0, 0, 0.25);
-}
-
-.program-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.is-expanded .program-card-header {
-  margin-bottom: 16px;
-}
-
-.program-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.expand-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.program-title {
-  font-size: 20px;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.is-active .program-title {
-  color: var(--primary-accent);
-}
-
-.active-badge {
-  background-color: var(--primary-accent);
-  color: #000;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.inactive-desc {
-  color: var(--text-secondary);
-  font-size: 14px;
 }
 
 .days-list {
@@ -804,8 +680,8 @@ body {
 }
 
 .day-action-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -963,8 +839,8 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -999,13 +875,13 @@ body {
 }
 
 .remove-btn {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   border-radius: 8px !important;
   padding: 0 !important;
-  margin-left: 12px;
+  margin-left: 8px;
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -1179,8 +1055,8 @@ body.modal-open {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -1275,70 +1151,6 @@ body.modal-open {
   transform: scale(0.9) translateY(20px);
 }
 
-/* Redesigned program Builder Header Actions */
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.btn-save-program {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: var(--primary-accent);
-  color: #000000;
-  border: none;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 6px 16px;
-  box-shadow: 0 4px 12px rgba(204, 255, 0, 0.2);
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.btn-save-program:hover {
-  background-color: var(--primary-accent-dark);
-  box-shadow: 0 6px 18px rgba(204, 255, 0, 0.35);
-  transform: translateY(-2px);
-}
-
-.btn-save-program:active {
-  transform: translateY(1px) scale(0.97);
-  box-shadow: 0 2px 6px rgba(204, 255, 0, 0.15);
-}
-
-.btn-delete-program {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: var(--danger);
-  color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 6px 16px;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.btn-delete-program:hover {
-  background-color: #ff3333;
-  color: #ffffff;
-  transform: translateY(-2px);
-}
-
-.btn-delete-program:active {
-  transform: translateY(1px) scale(0.97);
-  background-color: #e60000;
-}
-
-.btn-icon {
-  font-size: 14px;
-}
-
 /* Bottom Navigation */
 .bottom-nav {
   position: fixed;
@@ -1401,46 +1213,9 @@ body.modal-open {
   /* Space for bottom nav */
 }
 
-/* Builder Bottom Actions */
-.builder-bottom-actions {
-  display: flex;
-  gap: 16px;
-  margin-top: 32px;
-  margin-bottom: 24px;
-}
-
-.bottom-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  font-size: 16px;
-  border-radius: 12px;
-}
-
-/* Home.vue Specific Overrides */
-.home-header {
-  margin-bottom: 24px;
-}
-
-.home-title {
-  margin: 0;
-}
-
-.btn-start-workout {
-  padding: 8px 16px;
-  font-size: 14px;
-}
-
 .empty-days-hint {
   padding: 12px;
   margin-top: 8px;
-}
-
-.btn-create-new {
-  display: inline-flex;
-  margin-top: 16px;
-  text-decoration: none;
 }
 
 .save-set-btn {
@@ -1455,108 +1230,6 @@ body.modal-open {
   cursor: not-allowed !important;
   box-shadow: none !important;
   transform: none !important;
-}
-
-/* Settings Page Styles */
-.setting-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-row.disabled {
-  opacity: 0.5;
-}
-
-.setting-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.setting-name {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.setting-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* Toggle Switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 26px;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #444;
-  transition: .3s;
-  border-radius: 26px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .3s;
-  border-radius: 50%;
-}
-
-input:checked+.slider {
-  background-color: var(--primary-accent);
-}
-
-input:checked+.slider:before {
-  transform: translateX(22px);
-}
-
-/* Select Input */
-.setting-select {
-  appearance: none;
-  background-color: var(--bg-main);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  padding: 8px 24px;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' width='16' height='16' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  width: 120px;
-  text-align-last: center;
-}
-
-.setting-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Utility Classes */
@@ -1741,47 +1414,7 @@ input:checked+.slider:before {
 
 .btn-set-action {
   padding: 0 12px;
-  min-height: 36px;
-}
-
-.add-set-row {
-  gap: 8px;
-  margin-top: 12px;
-  align-items: flex-end;
-}
-
-.add-set-dashed {
-  flex: 1;
-  border-style: dashed;
-}
-
-.btn-history-icon {
-  padding: 0 16px;
-}
-
-.workout-actions {
-  gap: 12px;
-  margin-top: 8px;
-  margin-bottom: 24px;
-}
-
-.btn-discard {
-  flex: 1;
-  min-height: 48px;
-  font-weight: 700;
-  font-size: 16px;
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.btn-save-workout {
-  flex: 2;
-  padding: 0 16px;
-  min-height: 48px;
-  font-weight: 700;
-  font-size: 16px;
-  color: #000000;
-  background-color: var(--primary-accent);
+  min-height: 44px;
 }
 
 .history-list-container {
@@ -1993,8 +1626,8 @@ input:checked+.slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-surface);

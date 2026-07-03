@@ -12,39 +12,40 @@ export const useHistoryStore = defineStore('history', () => {
 
   const isLoaded = ref(false)
 
+  const STALE_AFTER_MS = 60000
+  let lastLoadedAt = 0
+
   async function fetchHistory(reset = false, isScroll = false) {
     if (historyLoading.value) return
-    if (!reset && !isScroll && isLoaded.value) return
+
+    // Cached and fresh: serve as-is. Cached but stale: quietly revalidate
+    // from page 1 without flashing an empty list.
+    let replace = reset
+    if (!reset && !isScroll && isLoaded.value) {
+      if (Date.now() - lastLoadedAt < STALE_AFTER_MS) return
+      replace = true
+    }
 
     historyLoading.value = true
     loadFailed.value = false
     try {
-      if (reset) {
-        historyPage.value = 1
-        workout_logs.value = []
-        historyHasMore.value = true
-      }
-
+      const page = replace ? 1 : historyPage.value
       const response = await api.get('/workout-logs', {
-        params: {
-          page: historyPage.value
-        }
+        params: { page }
       })
 
       const newLogs = response.data.data
       const meta = response.data.meta
 
-      workout_logs.value = [...workout_logs.value, ...newLogs]
+      workout_logs.value = replace ? newLogs : [...workout_logs.value, ...newLogs]
 
       const currentPage = meta?.current_page || 1
       const lastPage = meta?.last_page || 1
 
-      if (currentPage >= lastPage) {
-        historyHasMore.value = false
-      } else {
-        historyPage.value++
-      }
+      historyHasMore.value = currentPage < lastPage
+      historyPage.value = currentPage < lastPage ? page + 1 : page
       isLoaded.value = true
+      lastLoadedAt = Date.now()
     } catch (e) {
       console.error('Failed to fetch history:', e)
       loadFailed.value = true

@@ -16,12 +16,12 @@
         
         <div class="flex-col" style="gap: 8px;">
           <label for="password" style="font-weight: 600; font-size: 14px;">Password</label>
-          <input type="password" class="input-large" style="width: 100%;" id="password" v-model="password" required minlength="8">
+          <PasswordInput id="password" v-model="password" required minlength="8" autocomplete="new-password" />
         </div>
-        
+
         <div class="flex-col" style="gap: 8px;">
           <label for="password_confirmation" style="font-weight: 600; font-size: 14px;">Confirm Password</label>
-          <input type="password" class="input-large" style="width: 100%;" id="password_confirmation" v-model="password_confirmation" required minlength="8">
+          <PasswordInput id="password_confirmation" v-model="password_confirmation" required minlength="8" autocomplete="new-password" />
         </div>
         
         <div v-if="errorList.length > 0" class="error-msg">
@@ -49,6 +49,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 
 const name = ref('');
 const email = ref('');

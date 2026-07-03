@@ -2,6 +2,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useExerciseStore } from '../stores/exercise'
 import PrimaryButton from './PrimaryButton.vue'
+import { muscleGroupColor } from '../utils/muscleColors'
 
 const props = defineProps({
   show: Boolean,
@@ -22,26 +23,7 @@ const visibleExercises = computed(() => {
   return exerciseStore.catalog
 })
 
-const getMuscleGroupColor = (group) => {
-  const colors = {
-    Chest: '#ff6b6b',
-    Back: '#45b7d1',
-    Shoulders: '#f9ca24',
-    Biceps: '#ff9ff3',
-    Triceps: '#feca57',
-    Forearms: '#1dd1a1',
-    Quadriceps: '#a55eea',
-    Hamstrings: '#26de81',
-    Glutes: '#fd9644',
-    Calves: '#00d2d3',
-    Abdominals: '#2bcbba',
-    Traps: '#eb3b5a',
-    Lats: '#3867d6',
-    'Full Body': '#8854d0',
-    Legs: '#4ecdc4'
-  }
-  return colors[group] || '#AAAAAA'
-}
+const getMuscleGroupColor = muscleGroupColor
 
 const toggleExerciseSelection = (exId) => {
   const newSet = new Set(selectedExercises.value)

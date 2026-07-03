@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useProgramStore, FAMOUS_programs } from '../stores/program'
+import { useProgramStore, FAMOUS_PROGRAMS } from '../stores/program'
 import AppModal from '../components/AppModal.vue'
 
 const router = useRouter()
@@ -62,7 +62,7 @@ function handleCustomProgram(name) {
 
         <!-- Famous Routine Templates -->
         <div 
-          v-for="tpl in FAMOUS_programs" 
+          v-for="tpl in FAMOUS_PROGRAMS"
           :key="tpl.id" 
           class="template-card tap-target tpl-card" 
           @click="selectTemplate(tpl)"

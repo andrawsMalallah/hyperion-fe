@@ -12,21 +12,26 @@ export const useDiscoverStore = defineStore('discover', () => {
 
   const isLoaded = ref(false)
 
+  const STALE_AFTER_MS = 60000
+  let lastLoadedAt = 0
+
   async function fetchDiscoverPrograms(reset = false, isScroll = false) {
     if (discoverLoading.value) return
-    if (!reset && !isScroll && isLoaded.value) return
+
+    // Cached and fresh: serve as-is. Cached but stale: quietly revalidate
+    // from page 1 without flashing an empty grid.
+    let replace = reset
+    if (!reset && !isScroll && isLoaded.value) {
+      if (Date.now() - lastLoadedAt < STALE_AFTER_MS) return
+      replace = true
+    }
 
     discoverLoading.value = true
     try {
-      if (reset) {
-        discoverPage.value = 1
-        discoverPrograms.value = []
-        discoverHasMore.value = true
-      }
-
+      const page = replace ? 1 : discoverPage.value
       const response = await api.get('/programs/discover', {
         params: {
-          page: discoverPage.value,
+          page,
           search: searchQuery.value || undefined
         }
       })
@@ -34,17 +39,15 @@ export const useDiscoverStore = defineStore('discover', () => {
       const newPrograms = response.data.data
       const meta = response.data.meta
 
-      discoverPrograms.value = [...discoverPrograms.value, ...newPrograms]
+      discoverPrograms.value = replace ? newPrograms : [...discoverPrograms.value, ...newPrograms]
 
       const currentPage = meta?.current_page || 1
       const lastPage = meta?.last_page || 1
 
-      if (currentPage >= lastPage) {
-        discoverHasMore.value = false
-      } else {
-        discoverPage.value++
-      }
+      discoverHasMore.value = currentPage < lastPage
+      discoverPage.value = currentPage < lastPage ? page + 1 : page
       isLoaded.value = true
+      lastLoadedAt = Date.now()
     } catch (e) {
       console.error('Failed to fetch discover programs:', e)
       discoverHasMore.value = false

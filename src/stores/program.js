@@ -4,7 +4,7 @@ import api from '../api'
 import { useExerciseStore } from './exercise'
 import { useToastStore } from './toast'
 
-export const FAMOUS_programs = [
+export const FAMOUS_PROGRAMS = [
   {
     id: 'tpl-ppl',
     name: 'Push / Pull / Legs',
@@ -77,17 +77,22 @@ export const useProgramStore = defineStore('program', () => {
   const fetchedprogramIds = ref(new Set())
   const isListLoaded = ref(false)
 
-  async function fetchprograms(force = false) {
-    if (!force && isListLoaded.value) return
+  const STALE_AFTER_MS = 60000
+  let lastLoadedAt = 0
+
+  async function fetchPrograms(force = false) {
+    // Serve the cache while fresh; quietly revalidate once it's stale.
+    if (!force && isListLoaded.value && Date.now() - lastLoadedAt < STALE_AFTER_MS) return
     loading.value = true
     try {
       const response = await api.get('/programs')
       const programsData = response.data.data
-      
+
       user_programs.value = programsData.map(s => ({
         id: s.id,
         name: s.name,
         is_active: s.is_active,
+        is_public: s.is_public,
         created_at: s.created_at
       }))
       
@@ -108,6 +113,7 @@ export const useProgramStore = defineStore('program', () => {
       })
       program_days.value = allDays
       isListLoaded.value = true
+      lastLoadedAt = Date.now()
     } catch (e) {
       console.error(e)
       useToastStore().error('Could not load your programs. Pull to retry or check your connection.')
@@ -130,6 +136,7 @@ export const useProgramStore = defineStore('program', () => {
         id: s.id,
         name: s.name,
         is_active: s.is_active,
+        is_public: s.is_public,
         created_at: s.created_at
       }
       if (idx !== -1) {
@@ -172,6 +179,7 @@ export const useProgramStore = defineStore('program', () => {
         id: s.id,
         name: s.name,
         is_active: s.is_active,
+        is_public: s.is_public,
         created_at: s.created_at
       }
       if (idx !== -1) {
@@ -248,6 +256,7 @@ export const useProgramStore = defineStore('program', () => {
     const payload = {
       name: draftProgramData.name,
       is_active: false,
+      is_public: draftProgramData.is_public ?? true,
       days: draftProgramData.days.map((d, index) => ({
         day_name: d.day_name,
         display_order: index + 1,
@@ -263,6 +272,7 @@ export const useProgramStore = defineStore('program', () => {
         id: newProgram.id,
         name: newProgram.name,
         is_active: newProgram.is_active,
+        is_public: newProgram.is_public,
         created_at: newProgram.created_at
       })
 
@@ -336,6 +346,7 @@ export const useProgramStore = defineStore('program', () => {
     const payload = {
       name: Program.name,
       is_active: Program.is_active,
+      is_public: Program.is_public ?? true,
       days: draftDays.map((d, index) => {
         const payloadDay = {
           day_name: d.day_name,
@@ -356,6 +367,7 @@ export const useProgramStore = defineStore('program', () => {
       
       Program.name = updatedProgram.name
       Program.is_active = updatedProgram.is_active
+      Program.is_public = updatedProgram.is_public
       
       program_days.value = program_days.value.filter(d => String(d.program_id) !== String(programId))
       
@@ -392,7 +404,7 @@ export const useProgramStore = defineStore('program', () => {
     draftProgram,
     fetchedprogramIds,
     isListLoaded,
-    fetchprograms,
+    fetchPrograms,
     fetchSingleProgram,
     fetchSingleProgramByDay,
     setActiveProgram,

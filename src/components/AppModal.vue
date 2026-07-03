@@ -40,24 +40,61 @@ const emit = defineEmits(['update:show', 'confirm', 'cancel'])
 
 const inputValue = ref(props.defaultValue)
 const inputRef = ref(null)
+const modalRef = ref(null)
+const titleId = 'modal-title-' + Math.random().toString(36).slice(2, 8)
+
+// Escape closes; Tab is trapped inside the dialog.
+let lastActiveElement = null
+
+function onKeydown(e) {
+  if (e.key === 'Escape') {
+    e.stopPropagation()
+    onCancel()
+    return
+  }
+  if (e.key === 'Tab' && modalRef.value) {
+    const focusables = modalRef.value.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    if (focusables.length === 0) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+}
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
     document.documentElement.classList.add('modal-open')
     document.body.classList.add('modal-open')
+    document.addEventListener('keydown', onKeydown)
+    lastActiveElement = document.activeElement
     inputValue.value = props.defaultValue
-    if (props.type === 'prompt') {
-      nextTick(() => {
-        if (inputRef.value) inputRef.value.focus()
-      })
-    }
+    nextTick(() => {
+      if (props.type === 'prompt' && inputRef.value) {
+        inputRef.value.focus()
+      } else if (modalRef.value) {
+        modalRef.value.focus()
+      }
+    })
   } else {
     document.documentElement.classList.remove('modal-open')
     document.body.classList.remove('modal-open')
+    document.removeEventListener('keydown', onKeydown)
+    if (lastActiveElement && lastActiveElement.focus) {
+      lastActiveElement.focus()
+    }
   }
 })
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown)
   if (props.show) {
     document.documentElement.classList.remove('modal-open')
     document.body.classList.remove('modal-open')
@@ -78,18 +115,26 @@ const onCancel = () => {
 <template>
   <Transition name="modal-fade">
     <div v-if="show" class="modal-overlay" @click.self="onCancel">
-      <div class="modal-content card" :style="{ maxWidth: maxWidth, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }">
-        
+      <div
+        ref="modalRef"
+        class="modal-content card"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="title ? titleId : undefined"
+        tabindex="-1"
+        :style="{ maxWidth: maxWidth, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }"
+      >
+
         <!-- Header -->
         <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
           <slot name="header">
             <div class="modal-title-box">
-              <h2 class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ title }}</h2>
+              <h2 :id="titleId" class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ title }}</h2>
               <p v-if="message" class="section-desc-top" style="margin: 20px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.4;">{{ message }}</p>
             </div>
           </slot>
-          <button class="close-modal-btn" @click="onCancel" title="Close">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <button class="close-modal-btn" @click="onCancel" title="Close" aria-label="Close dialog">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>

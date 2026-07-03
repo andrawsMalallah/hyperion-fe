@@ -32,7 +32,7 @@ function onSearchInput() {
   }
   searchTimeout = setTimeout(() => {
     fetchPrograms(true, false)
-  }, 1500)
+  }, 350)
 }
 
 function clearSearch() {
@@ -84,6 +84,9 @@ onUnmounted(() => {
   if (observer) {
     observer.disconnect()
   }
+  clearTimeout(searchTimeout)
+  // A leftover query would silently filter the next visit's results.
+  discoverStore.searchQuery = ''
   document.documentElement.classList.remove('modal-open')
   document.body.classList.remove('modal-open')
 })

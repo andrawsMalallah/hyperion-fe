@@ -1,84 +1,135 @@
-import { test, expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test'
 
-test('workout split builder and execution flow', async ({ page }) => {
-  // 1. Navigate to Home
-  await page.goto('/');
-  await expect(page).toHaveTitle(/workout-tracker/i);
-  await expect(page.locator('h1')).toHaveText('Home');
+// Requires the Laravel API on http://localhost:8000 with a seeded exercise
+// catalog and a personal-access Passport client (see backend README/setup).
+const API = 'http://localhost:8000/api'
 
-  // If there are no saved splits, create one from PPL template
-  const emptyState = page.locator('.empty-state');
-  if (await emptyState.isVisible() && await emptyState.locator('text=Create New Split').isVisible()) {
-    await emptyState.locator('text=Create New Split').click();
-    await page.waitForURL('**/create');
-    await page.click('text=Push / Pull / Legs');
-    await page.waitForURL('**/builder');
-    // Save Split in builder
-    await page.click('button:has-text("Save Changes")');
-    await page.waitForURL('**/');
+async function registerViaUi(page) {
+  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`
+  await page.goto('/register')
+  await page.fill('#name', 'E2E User')
+  await page.fill('#email', email)
+  await page.fill('#password', 'e2e-password-123')
+  await page.fill('#password_confirmation', 'e2e-password-123')
+  await page.click('button[type=submit]')
+  await page.waitForURL('**/')
+  await expect(page.getByText('Hello,')).toBeVisible()
+  return page.evaluate(() => localStorage.getItem('auth_token'))
+}
+
+// Registration is rate-limited, so each worker registers once (through the
+// real UI) and later tests in the worker reuse the stored session.
+const session = {}
+
+const test = base.extend({
+  authToken: async ({ page }, use) => {
+    if (!session.token) {
+      session.token = await registerViaUi(page)
+      session.user = await page.evaluate(() => localStorage.getItem('user'))
+    } else {
+      await page.addInitScript(([token, user]) => {
+        localStorage.setItem('auth_token', token)
+        if (user) localStorage.setItem('user', user)
+      }, [session.token, session.user])
+    }
+    await use(session.token)
   }
+})
 
-  // Ensure active split card exists
-  const activeSplitCard = page.locator('.split-card.is-active').first();
-  await expect(activeSplitCard).toBeVisible();
+async function api(request, token, method, path, data) {
+  const res = await request.fetch(API + path, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    data
+  })
+  expect(res.ok(), `${method} ${path} -> ${res.status()}`).toBeTruthy()
+  return res.json()
+}
 
-  // 2. Navigate to Builder by clicking Edit
-  await activeSplitCard.locator('button:has-text("Edit")').click();
-  await expect(page.locator('h1')).toHaveText('Push / Pull / Legs');
+test('log a prescribed workout end-to-end', async ({ page, request, authToken }) => {
+  const token = authToken
 
-  // Find the 'Legs' day card and click its "+" button to add an exercise
-  const legsCard = page.locator('.day-card').filter({ hasText: 'Legs' });
-  await legsCard.locator('button[title="Add Exercise"]').click();
+  // Seed a program with a prescription through the API (setup only).
+  const exercises = (await api(request, token, 'GET', '/exercises?search=press')).data.slice(0, 1)
+  await api(request, token, 'POST', '/programs', {
+    name: 'E2E Program',
+    is_active: true,
+    days: [{
+      day_name: 'Push',
+      display_order: 1,
+      exercises: [{
+        exercise_id: exercises[0].id,
+        target_sets: 2,
+        rep_range_min: 8,
+        rep_range_max: 12,
+        rest_seconds: 60
+      }]
+    }]
+  })
 
-  // Search for an exercise in the modal
-  await page.fill('.modal-content .search-input', 'Squat');
-  
-  const squatItem = page.locator('.modal-exercise-list .selectable-item').filter({ hasText: 'Barbell Squat' }).first();
-  await expect(squatItem).toBeVisible();
-  await squatItem.click();
+  // Start the workout from Home.
+  await page.goto('/')
+  await page.click('.showcase-start-btn')
+  await page.waitForURL('**/workout/**')
 
-  // Click Add Selected button in modal
-  await page.click('button:has-text("Add Selected")');
+  // Prescription prefills two rows and shows the target.
+  await expect(page.locator('.rx-target-hint')).toContainText('2×8-12')
+  await expect(page.locator('.set-row')).toHaveCount(2)
 
-  // Verify it was added to the 'Legs' day
-  await expect(legsCard.locator('.exercise-item').filter({ hasText: 'Barbell Squat' })).toBeVisible();
+  // Log a set; the rest timer starts with the prescribed 60s.
+  await page.getByLabel('Set 1 weight (kg)').fill('60')
+  await page.getByLabel('Set 1 reps').fill('10')
+  await page.locator('button[title="Save Set"]').first().click()
+  await expect(page.locator('.rest-timer-overlay')).toBeVisible()
+  await expect(page.locator('.rest-time')).toHaveText(/^(1:00|0:5\d)$/)
+  await page.click('.rest-timer-overlay >> text=Skip')
 
-  // Click Save Changes to persist split builder changes
-  await page.click('button:has-text("Save Changes")');
-  await page.waitForURL('**/');
+  // Second set, then save the workout.
+  await page.getByLabel('Set 2 weight (kg)').fill('62.5')
+  await page.getByLabel('Set 2 reps').fill('9')
+  await page.locator('button[title="Save Set"]').first().click()
+  await page.click('.rest-timer-overlay >> text=Skip')
+  await page.click('text=Save Workout')
+  await page.waitForURL('**/')
 
-  // 3. Go back to Home and Start Workout for Legs
-  // Since the active split is expanded by default, we wait a moment for the transition to finish if any,
-  // and click Start button directly.
-  await page.waitForTimeout(500);
-  
-  const legsRow = page.locator('.day-row').filter({ hasText: 'Legs' });
-  await legsRow.locator('button:has-text("Start")').click();
+  // The session shows up in History with both sets.
+  await page.goto('/history')
+  await expect(page.locator('.history-card').first()).toContainText('Push')
+  await expect(page.locator('.history-set-pill')).toHaveCount(2)
+})
 
-  // Verify Active Workout view
-  await expect(page.locator('h1')).toContainText('Legs Workout');
-  await expect(page.locator('.exercise-card')).toContainText('Barbell Squat');
+test('rest timer survives a page reload', async ({ page, request, authToken }) => {
+  const token = authToken
 
-  // 4. Enter test set data and finish workout
-  // Click Add Set
-  await page.click('.add-set-btn');
+  const exercises = (await api(request, token, 'GET', '/exercises?search=squat')).data.slice(0, 1)
+  await api(request, token, 'POST', '/programs', {
+    name: 'Timer Program',
+    is_active: true,
+    days: [{ day_name: 'Legs', display_order: 1, exercises: [{ exercise_id: exercises[0].id }] }]
+  })
 
-  const setRow = page.locator('.set-row').first();
-  await setRow.locator('input[type="number"]').first().fill('100'); // Weight
-  await setRow.locator('input[type="number"]').nth(1).fill('10');   // Reps
-  
-  // Click Save Set
-  await setRow.locator('.save-set-btn').click();
+  await page.goto('/')
+  await page.click('.showcase-start-btn')
+  await page.waitForURL('**/workout/**')
 
-  // Verify rest timer appears
-  await expect(page.locator('.rest-timer-overlay')).toBeVisible();
+  await page.click('button[title="Add Set"]')
+  await page.getByLabel('Set 1 weight (kg)').fill('100')
+  await page.getByLabel('Set 1 reps').fill('5')
+  await page.locator('button[title="Save Set"]').first().click()
+  await expect(page.locator('.rest-timer-overlay')).toBeVisible()
 
-  // Skip the timer
-  await page.click('.rest-timer-overlay button:has-text("Skip")');
+  await page.reload()
 
-  // Save Workout
-  await page.click('button:has-text("Save Workout")');
+  // Wall-clock anchored: still counting after the reload, and the
+  // completed set was restored from the persisted session.
+  await expect(page.locator('.rest-timer-overlay')).toBeVisible()
+  await expect(page.locator('.set-row.is-completed')).toHaveCount(1)
+})
 
-  // Verify redirected back to Home
-  await expect(page.locator('h1')).toHaveText('Home');
-});
+test('escape closes a dialog', async ({ page, authToken }) => {
+  await page.goto('/create')
+  await page.click('text=Custom Program')
+  await expect(page.locator('[role="dialog"]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0)
+})

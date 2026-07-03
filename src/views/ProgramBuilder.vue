@@ -6,6 +6,7 @@ import { useProgramStore } from '../stores/program'
 import ExerciseSelectionModal from '../components/ExerciseSelectionModal.vue'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import { muscleGroupColor } from '../utils/muscleColors'
 
 const router = useRouter()
 const route = useRoute()
@@ -27,6 +28,7 @@ const targetProgram = computed(() => {
 // Local Draft State
 const draftDays = ref([])
 const draftProgramName = ref('')
+const draftIsPublic = ref(true)
 const isDirty = ref(false)
 const isSaving = ref(false)
 const isDeleting = ref(false)
@@ -46,6 +48,7 @@ const errorList = computed(() => {
 const initializeDraft = () => {
   if (targetProgram.value) {
     draftProgramName.value = targetProgram.value.name
+    draftIsPublic.value = targetProgram.value.is_public ?? true
     if (route.params.programId === 'new') {
       draftDays.value = JSON.parse(JSON.stringify(targetProgram.value.days || []))
     } else {
@@ -239,6 +242,7 @@ const saveProgram = async () => {
       if (route.params.programId === 'new') {
         const newId = await programStore.saveNewProgram({
           name: draftProgramName.value.trim() || 'Custom Program',
+          is_public: draftIsPublic.value,
           days: draftDays.value
         })
         if (newId) {
@@ -248,6 +252,7 @@ const saveProgram = async () => {
         if (draftProgramName.value && draftProgramName.value.trim() !== '' && draftProgramName.value !== targetProgram.value.name) {
           programStore.renameProgram(targetProgram.value.id, draftProgramName.value.trim())
         }
+        targetProgram.value.is_public = draftIsPublic.value
         await programStore.syncProgramDays(targetProgram.value.id, draftDays.value)
       }
       isDirty.value = false
@@ -290,26 +295,7 @@ const handleDeleteProgramConfirm = async () => {
   }
 }
 
-const getMuscleGroupColor = (group) => {
-  const colors = {
-    Chest: '#ff6b6b',
-    Back: '#45b7d1',
-    Shoulders: '#f9ca24',
-    Biceps: '#ff9ff3',
-    Triceps: '#feca57',
-    Forearms: '#1dd1a1',
-    Quadriceps: '#a55eea',
-    Hamstrings: '#26de81',
-    Glutes: '#fd9644',
-    Calves: '#00d2d3',
-    Abdominals: '#2bcbba',
-    Traps: '#eb3b5a',
-    Lats: '#3867d6',
-    'Full Body': '#8854d0',
-    Legs: '#4ecdc4'
-  }
-  return colors[group] || '#AAAAAA'
-}
+const getMuscleGroupColor = muscleGroupColor
 </script>
 
 <template>
@@ -334,13 +320,32 @@ const getMuscleGroupColor = (group) => {
       </div>
 
       <div class="builder-content-wrapper" v-else-if="targetProgram" key="content">
-        <div class="header-row">
-          <input 
-            class="program-name-input" 
-            v-model="draftProgramName" 
-            @input="isDirty = true" 
-            placeholder="Program Name" 
+        <div class="header-row" style="flex-wrap: wrap; gap: 12px;">
+          <input
+            class="program-name-input"
+            v-model="draftProgramName"
+            @input="isDirty = true"
+            placeholder="Program Name"
+            aria-label="Program name"
           />
+          <button
+            class="visibility-toggle"
+            :class="{ 'visibility-toggle--public': draftIsPublic }"
+            :aria-pressed="draftIsPublic"
+            @click="draftIsPublic = !draftIsPublic; isDirty = true"
+            :title="draftIsPublic ? 'Anyone can find this program in Discover' : 'Only you can see this program'"
+          >
+            <svg v-if="draftIsPublic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            {{ draftIsPublic ? 'Public in Discover' : 'Private' }}
+          </button>
         </div>
 
         <div class="builder-container">
@@ -575,6 +580,28 @@ const getMuscleGroupColor = (group) => {
 <style scoped>
 .exercise-item {
   flex-wrap: wrap;
+}
+
+.visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.visibility-toggle--public {
+  color: var(--primary-accent);
+  border-color: rgba(204, 255, 0, 0.4);
+  background-color: rgba(204, 255, 0, 0.04);
 }
 
 .rx-summary {
