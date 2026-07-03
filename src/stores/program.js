@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
 import { useExerciseStore } from './exercise'
+import { useToastStore } from './toast'
 
 export const FAMOUS_programs = [
   {
@@ -76,7 +77,8 @@ export const useProgramStore = defineStore('program', () => {
       program_days.value = allDays
       isListLoaded.value = true
     } catch (e) {
-      console.error(e);
+      console.error(e)
+      useToastStore().error('Could not load your programs. Pull to retry or check your connection.')
     } finally {
       loading.value = false
     }
@@ -174,6 +176,7 @@ export const useProgramStore = defineStore('program', () => {
       fetchedprogramIds.value.add(String(s.id))
     } catch (e) {
       console.error(e)
+      useToastStore().error('Could not load this workout day.')
     } finally {
       loading.value = false
     }
@@ -192,6 +195,7 @@ export const useProgramStore = defineStore('program', () => {
     } catch (e) {
       console.error("Failed to set active Program on server, rolling back:", e)
       user_programs.value = originalprograms
+      useToastStore().error('Could not activate the program — change was reverted.')
     }
   }
 
@@ -290,6 +294,8 @@ export const useProgramStore = defineStore('program', () => {
       fetchedprogramIds.value.delete(String(programId))
     } catch (e) {
       console.error(e)
+      useToastStore().error('Could not delete the program.')
+      throw e
     }
   }
 

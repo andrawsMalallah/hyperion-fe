@@ -1,12 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
+import { useToastStore } from './toast'
 
 export const useHistoryStore = defineStore('history', () => {
   const workout_logs = ref([])
   const historyPage = ref(1)
   const historyHasMore = ref(true)
   const historyLoading = ref(false)
+  const loadFailed = ref(false)
 
   const isLoaded = ref(false)
 
@@ -15,6 +17,7 @@ export const useHistoryStore = defineStore('history', () => {
     if (!reset && !isScroll && isLoaded.value) return
 
     historyLoading.value = true
+    loadFailed.value = false
     try {
       if (reset) {
         historyPage.value = 1
@@ -44,7 +47,8 @@ export const useHistoryStore = defineStore('history', () => {
       isLoaded.value = true
     } catch (e) {
       console.error('Failed to fetch history:', e)
-      historyHasMore.value = false
+      loadFailed.value = true
+      useToastStore().error('Could not load workout history.')
     } finally {
       historyLoading.value = false
     }
@@ -55,6 +59,7 @@ export const useHistoryStore = defineStore('history', () => {
     historyPage.value = 1
     historyHasMore.value = true
     historyLoading.value = false
+    loadFailed.value = false
     isLoaded.value = false
   }
 
@@ -63,6 +68,7 @@ export const useHistoryStore = defineStore('history', () => {
     historyPage,
     historyHasMore,
     historyLoading,
+    loadFailed,
     isLoaded,
     fetchHistory,
     reset

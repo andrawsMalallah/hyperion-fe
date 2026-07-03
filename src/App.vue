@@ -2,6 +2,7 @@
 import RestTimer from './components/RestTimer.vue'
 import BottomNav from './components/BottomNav.vue'
 import AppModal from './components/AppModal.vue'
+import ToastHost from './components/ToastHost.vue'
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { OverlayScrollbars } from 'overlayscrollbars'
 import { useWorkoutStore } from './stores/workout'
@@ -33,10 +34,19 @@ const closeDropdown = (e) => {
   }
 }
 
+// Keep the persisted rest countdown alive across refreshes and when the
+// tab comes back from the background (timers are wall-clock anchored).
+const handleVisibility = () => {
+  if (document.visibilityState === 'visible') {
+    useWorkoutStore().resumeRestTimer()
+  }
+}
+
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
+  document.addEventListener('visibilitychange', handleVisibility)
   const workoutStore = useWorkoutStore()
-  workoutStore.stopRestTimer()
+  workoutStore.resumeRestTimer()
 
   // Initialize OverlayScrollbars globally
   OverlayScrollbars(document.body, {
@@ -50,6 +60,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
+  document.removeEventListener('visibilitychange', handleVisibility)
 })
 
 // Logout confirmation
@@ -126,6 +137,7 @@ watch(isAuthenticated, (newVal) => {
       </router-view>
     </main>
 
+    <ToastHost />
     <RestTimer v-if="isAuthenticated" />
     <BottomNav v-if="isAuthenticated" />
 

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
+import { useToastStore } from './toast'
 
 export const useDiscoverStore = defineStore('discover', () => {
   const discoverPrograms = ref([])
@@ -45,8 +46,9 @@ export const useDiscoverStore = defineStore('discover', () => {
       }
       isLoaded.value = true
     } catch (e) {
-      console.error('Failed to fetch discover splits:', e)
+      console.error('Failed to fetch discover programs:', e)
       discoverHasMore.value = false
+      useToastStore().error('Could not load community programs.')
     } finally {
       discoverLoading.value = false
     }

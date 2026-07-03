@@ -62,7 +62,7 @@ const pastWorkouts = computed(() => {
 
 function setupObserver() {
   observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && !loading.value && hasMore.value) {
+    if (entries[0].isIntersecting && !loading.value && hasMore.value && !historyStore.loadFailed) {
       fetchHistory()
     }
   }, { rootMargin: '100px' })
@@ -145,13 +145,21 @@ onUnmounted(() => {
             <div class="history-sets-flex mt-8">
               <div v-for="(set, sIdx) in group.sets" :key="set.id" class="history-set-pill">
                 <span class="set-num-label">S{{ sIdx + 1 }}</span>
-                <span class="set-val-label">{{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}</span>
+                <span class="set-val-label">{{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
               </div>
             </div>
           </div>
         </div>
       </div>
     </TransitionGroup>
+
+    <!-- Error State -->
+    <div v-else-if="historyStore.loadFailed" class="empty-state card py-40 text-center">
+      <p style="color: var(--text-secondary); margin: 0 0 16px 0;">Couldn't load your workout history.</p>
+      <PrimaryButton class="inline-flex px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;" @click="fetchHistory(true)">
+        Try Again
+      </PrimaryButton>
+    </div>
 
     <!-- Empty State -->
     <div v-else-if="!loading" class="empty-state card py-40 text-center">
@@ -164,6 +172,9 @@ onUnmounted(() => {
     <!-- Loading Spinner / Footer -->
     <div class="footer-loader" ref="loaderRef" style="display: flex; justify-content: center; align-items: center; min-height: 45px; box-sizing: border-box; margin-top: 16px;">
       <div v-if="loading && pastWorkouts.length > 0" class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
+      <button v-else-if="historyStore.loadFailed && pastWorkouts.length > 0" class="btn-secondary tap-target px-24" @click="fetchHistory()">
+        Retry loading more
+      </button>
       <div v-else-if="!hasMore && pastWorkouts.length > 0" class="end-message" style="margin: 0;">
         No more data to display
       </div>

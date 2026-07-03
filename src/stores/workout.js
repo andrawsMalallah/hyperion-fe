@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
 import { useHistoryStore } from './history'
+import { useToastStore } from './toast'
 
 export const useWorkoutStore = defineStore('workout', () => {
   try {
@@ -23,16 +24,26 @@ export const useWorkoutStore = defineStore('workout', () => {
   const activeWorkoutDayId = ref(null)
   const activeWorkoutSets = ref([]) // local buffer of sets
   const activeWorkoutStartTime = ref(null)
-  
-  // Rest Timer State
+
+  // Rest Timer State — anchored to a wall-clock end timestamp so the
+  // countdown stays correct across refreshes and backgrounded tabs.
+  const restEndsAt = ref(null) // epoch ms, persisted
   const restTimeLeft = ref(0)
   const isResting = ref(false)
   const timerEnabled = ref(true)
   const defaultRestTime = ref(90)
   const weightUnit = ref('kg')
   let timerInterval = null
+  let audioCtx = null
+
+  const hasActiveSession = () =>
+    activeWorkoutDayId.value !== null && activeWorkoutSets.value.length > 0
 
   function startWorkout(dayId) {
+    // Resuming the same day must never wipe logged sets.
+    if (activeWorkoutDayId.value === dayId && activeWorkoutSets.value.length > 0) {
+      return
+    }
     activeWorkoutDayId.value = dayId
     activeWorkoutStartTime.value = new Date().toISOString()
     activeWorkoutSets.value = []
@@ -80,53 +91,140 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 
   function logSet(exerciseId, weight, reps, rpe = 0) {
-    if (!activeWorkoutDayId.value) return
+    if (!activeWorkoutDayId.value) return null
 
-    activeWorkoutSets.value.push({
-      id: 'local-set-' + Date.now(),
+    const set = {
+      id: 'local-set-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
       exercise_id: exerciseId,
       weight: parseFloat(weight),
       reps: parseInt(reps),
       rpe: parseInt(rpe) || null
-    })
+    }
+    activeWorkoutSets.value.push(set)
 
     if (timerEnabled.value) {
       startRestTimer(defaultRestTime.value)
     }
+    return set.id
   }
-  
-  function getPreviousLoad(exerciseId) {
+
+  // Returns the sets of the most recent logged session for an exercise,
+  // ordered by set_order — used to prefill hints during a workout.
+  function getPreviousSets(exerciseId) {
     const historyStore = useHistoryStore()
     for (const log of historyStore.workout_logs) {
       if (log.sets) {
-        const sets = log.sets.filter(s => s.exercise_id === exerciseId)
-        if (sets.length > 0) {
-          return { weight: sets[0].weight, reps: sets[0].reps }
-        }
+        const sets = log.sets
+          .filter(s => s.exercise_id === exerciseId)
+          .sort((a, b) => a.set_order - b.set_order)
+        if (sets.length > 0) return sets
       }
     }
-    return null
+    return []
+  }
+
+  function getPreviousLoad(exerciseId) {
+    const sets = getPreviousSets(exerciseId)
+    return sets.length > 0 ? { weight: sets[0].weight, reps: sets[0].reps } : null
   }
 
   function startRestTimer(seconds) {
-    stopRestTimer()
-    restTimeLeft.value = seconds
-    isResting.value = true
-    
-    timerInterval = setInterval(() => {
-      restTimeLeft.value--
-      if (restTimeLeft.value <= 0) {
-        stopRestTimer()
-      }
-    }, 1000)
+    primeAudio()
+    restEndsAt.value = Date.now() + seconds * 1000
+    runTicker()
   }
 
+  function extendRestTimer(seconds) {
+    if (!restEndsAt.value) return
+    restEndsAt.value += seconds * 1000
+  }
+
+  // Re-attach the ticker to a persisted end timestamp (after a page
+  // refresh) or force a recompute when the tab becomes visible again.
+  function resumeRestTimer() {
+    if (restEndsAt.value && restEndsAt.value > Date.now()) {
+      runTicker()
+    } else if (restEndsAt.value) {
+      // Expired while the app was closed — clear silently.
+      clearRestState()
+    }
+  }
+
+  function runTicker() {
+    if (timerInterval) clearInterval(timerInterval)
+    const tick = () => {
+      if (!restEndsAt.value) {
+        clearRestState()
+        return
+      }
+      const left = Math.max(0, Math.ceil((restEndsAt.value - Date.now()) / 1000))
+      restTimeLeft.value = left
+      isResting.value = left > 0
+      if (left <= 0) {
+        notifyRestOver()
+        clearRestState()
+      }
+    }
+    tick()
+    timerInterval = setInterval(tick, 250)
+  }
+
+  // Skip button — clears without the "rest over" cue.
   function stopRestTimer() {
+    clearRestState()
+  }
+
+  function clearRestState() {
+    if (timerInterval) {
+      clearInterval(timerInterval)
+      timerInterval = null
+    }
+    restEndsAt.value = null
     isResting.value = false
     restTimeLeft.value = 0
-    if (timerInterval) clearInterval(timerInterval)
   }
-  
+
+  // AudioContext must be created during a user gesture (saving a set) to
+  // be allowed to play later when the countdown hits zero.
+  function primeAudio() {
+    try {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext
+        if (Ctx) audioCtx = new Ctx()
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume()
+      }
+    } catch (e) {
+      audioCtx = null
+    }
+  }
+
+  function notifyRestOver() {
+    if (navigator.vibrate) {
+      navigator.vibrate([200, 100, 200])
+    }
+    try {
+      if (!audioCtx) return
+      const now = audioCtx.currentTime
+      ;[0, 0.25].forEach(offset => {
+        const osc = audioCtx.createOscillator()
+        const gain = audioCtx.createGain()
+        osc.type = 'sine'
+        osc.frequency.value = 880
+        gain.gain.setValueAtTime(0.0001, now + offset)
+        gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2)
+        osc.connect(gain)
+        gain.connect(audioCtx.destination)
+        osc.start(now + offset)
+        osc.stop(now + offset + 0.22)
+      })
+    } catch (e) {
+      // Audio is best-effort; vibration already fired.
+    }
+  }
+
   function removeSet(setId) {
     activeWorkoutSets.value = activeWorkoutSets.value.filter(s => s.id !== setId)
   }
@@ -140,21 +238,39 @@ export const useWorkoutStore = defineStore('workout', () => {
       defaultRestTime.value = parseInt(s.default_rest_time)
       weightUnit.value = s.weight_unit || 'kg'
     } catch (e) {
-      console.error("Failed to fetch settings:", e)
+      console.error('Failed to fetch settings:', e)
     } finally {
       loading.value = false
     }
   }
 
-  async function updateSettings(fields) {
+  let settingsDebounce = null
+  let pendingSettings = {}
+
+  function updateSettings(fields) {
+    // Coalesce rapid toggles into one request.
+    pendingSettings = { ...pendingSettings, ...fields }
+    if (settingsDebounce) clearTimeout(settingsDebounce)
+    settingsDebounce = setTimeout(flushSettings, 500)
+  }
+
+  async function flushSettings() {
+    const payload = pendingSettings
+    pendingSettings = {}
+    settingsDebounce = null
+    const toast = useToastStore()
     try {
-      const response = await api.put('/user/settings', fields)
+      const response = await api.put('/user/settings', payload)
       const s = response.data.data
       timerEnabled.value = !!s.timer_enabled
       defaultRestTime.value = parseInt(s.default_rest_time)
       weightUnit.value = s.weight_unit || 'kg'
+      toast.success('Settings saved')
     } catch (e) {
-      console.error("Failed to update settings:", e)
+      console.error('Failed to update settings:', e)
+      toast.error('Could not save settings — check your connection.')
+      // Re-sync local state with the server's truth.
+      fetchSettings()
     }
   }
 
@@ -165,18 +281,24 @@ export const useWorkoutStore = defineStore('workout', () => {
     stopRestTimer()
   }
 
-  return { 
+  return {
     loading,
     activeWorkoutDayId,
     activeWorkoutSets,
     activeWorkoutStartTime,
-    startWorkout, 
-    finishWorkout, 
+    hasActiveSession,
+    startWorkout,
+    finishWorkout,
     cancelWorkout,
     logSet,
     getPreviousLoad,
+    getPreviousSets,
+    restEndsAt,
     restTimeLeft,
     isResting,
+    startRestTimer,
+    extendRestTimer,
+    resumeRestTimer,
     stopRestTimer,
     removeSet,
     timerEnabled,
@@ -188,6 +310,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 }, {
   persist: {
-    paths: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'timerEnabled', 'defaultRestTime', 'weightUnit']
+    paths: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'restEndsAt', 'timerEnabled', 'defaultRestTime', 'weightUnit']
   }
 })

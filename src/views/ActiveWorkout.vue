@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
@@ -40,19 +40,46 @@ const errorList = computed(() => {
   return []
 })
 
+// Keep the screen awake mid-workout (phones lock fast in a gym).
+let wakeLock = null
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen')
+    }
+  } catch (e) {
+    // Not critical — browser may refuse (low battery, unsupported).
+  }
+}
+
+function handleVisibility() {
+  if (document.visibilityState === 'visible') {
+    requestWakeLock()
+  }
+}
+
 onMounted(async () => {
   pageLoading.value = true
-  await programStore.fetchSingleProgramByDay(parsedDayId)
+  requestWakeLock()
+  document.addEventListener('visibilitychange', handleVisibility)
+  window.addEventListener('beforeunload', beforeUnloadGuard)
+
+  // Fetch the day and the history (for previous-performance hints) together.
+  await Promise.all([
+    programStore.fetchSingleProgramByDay(parsedDayId),
+    historyStore.fetchHistory(false, false).catch(e => console.error('Failed to load history:', e))
+  ])
 
   if (workoutStore.activeWorkoutDayId !== parsedDayId) {
     workoutStore.startWorkout(parsedDayId)
   }
-  
+
   if (day.value && activeWorkoutSession.value.length === 0) {
     activeWorkoutSession.value = day.value.exercises.map(exId => {
       const exercise = exerciseStore.exercises.find(e => e.id === exId)
-      const prevLoad = workoutStore.getPreviousLoad(exId)
-      
+      const prevSets = workoutStore.getPreviousSets(exId)
+
       // Load existing sets logged during this active workout session (from activeWorkoutSets)
       const existingSets = workoutStore.activeWorkoutSets
         .filter(s => s.exercise_id === exId)
@@ -60,14 +87,16 @@ onMounted(async () => {
           localId: s.id,
           weight: s.weight,
           reps: s.reps,
+          rpe: s.rpe ?? '',
           completed: true,
           setId: s.id
         }))
-      
+
       return {
         id: exId,
         exercise,
-        prevLoad,
+        prevSets,
+        prevLoad: prevSets.length > 0 ? { weight: prevSets[0].weight, reps: prevSets[0].reps } : null,
         sets: existingSets
       }
     })
@@ -75,11 +104,27 @@ onMounted(async () => {
   pageLoading.value = false
 })
 
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibility)
+  window.removeEventListener('beforeunload', beforeUnloadGuard)
+  if (wakeLock) {
+    wakeLock.release().catch(() => {})
+    wakeLock = null
+  }
+})
+
+function formatPrevSets(prevSets) {
+  if (!prevSets || prevSets.length === 0) return ''
+  const shown = prevSets.slice(0, 4).map(s => `${s.weight}×${s.reps}`).join(' · ')
+  return prevSets.length > 4 ? shown + ' …' : shown
+}
+
 function addSet(exIndex) {
   activeWorkoutSession.value[exIndex].sets.push({
     localId: Date.now() + Math.random(),
     weight: '',
     reps: '',
+    rpe: '',
     completed: false,
     setId: null
   })
@@ -96,15 +141,11 @@ function removeSet(exIndex, setIndex) {
 function saveSet(exIndex, setIndex) {
   const s = activeWorkoutSession.value[exIndex].sets[setIndex]
   if (s.weight === '' || s.weight === null || s.weight === undefined || s.reps === '' || s.reps === null || s.reps === undefined) return
-  
+
   s.completed = true
-  
+
   // Save to Pinia
-  workoutStore.logSet(activeWorkoutSession.value[exIndex].id, Number(s.weight), Number(s.reps), 0)
-  
-  // Assign setId from the last pushed set
-  const logs = workoutStore.activeWorkoutSets
-  s.setId = logs[logs.length - 1].id
+  s.setId = workoutStore.logSet(activeWorkoutSession.value[exIndex].id, Number(s.weight), Number(s.reps), s.rpe || 0)
 }
 
 function editSet(exIndex, setIndex) {
@@ -164,9 +205,28 @@ const showLeaveModal = ref(false)
 const nextRoute = ref(null)
 const isLeaving = ref(false)
 
-const hasChanges = computed(() => {
+const hasCompletedSets = computed(() => {
   return activeWorkoutSession.value.some(ex => ex.sets.some(s => s.completed))
 })
+
+// Typed-but-unsaved values count as changes too — losing them silently
+// mid-workout is the worst possible failure mode.
+const hasChanges = computed(() => {
+  return activeWorkoutSession.value.some(ex =>
+    ex.sets.some(s => s.completed || (s.weight !== '' && s.weight !== null) || (s.reps !== '' && s.reps !== null))
+  )
+})
+
+function beforeUnloadGuard(e) {
+  // Completed sets survive a refresh (persisted); typed-but-unsaved don't.
+  const hasUnsavedTyped = activeWorkoutSession.value.some(ex =>
+    ex.sets.some(s => !s.completed && ((s.weight !== '' && s.weight !== null) || (s.reps !== '' && s.reps !== null)))
+  )
+  if (hasUnsavedTyped) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
 
 onBeforeRouteLeave((to, from) => {
   if (isLeaving.value) {
@@ -198,6 +258,11 @@ async function saveWorkout() {
       }
     })
   })
+
+  if (!hasCompletedSets.value) {
+    errorMsg.value = 'Complete at least one set (weight and reps) before saving.'
+    return
+  }
 
   try {
     isSaving.value = true
@@ -249,7 +314,12 @@ async function saveWorkout() {
       <div v-else-if="activeWorkoutSession.length > 0" class="exercises-container" key="content">
         <div v-for="(ex, exIndex) in activeWorkoutSession" :key="ex.id" class="card exercise-card">
           <div class="flex-row ex-header ex-header-container">
-            <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
+            <div class="ex-title-block">
+              <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
+              <span v-if="ex.prevSets && ex.prevSets.length > 0" class="prev-session-hint">
+                Last: {{ formatPrevSets(ex.prevSets) }}
+              </span>
+            </div>
             <div class="ex-header-actions">
               <!-- History Button -->
               <button 
@@ -281,6 +351,7 @@ async function saveWorkout() {
             <div class="set-col num-col">Set</div>
             <div class="set-col">{{ workoutStore.weightUnit }}</div>
             <div class="set-col">Reps</div>
+            <div class="set-col rpe-col">RPE</div>
             <div class="set-col action-col text-right">Actions</div>
           </div>
 
@@ -288,22 +359,36 @@ async function saveWorkout() {
             <div v-for="(s, setIndex) in ex.sets" :key="s.localId" class="set-row" :class="{ 'is-completed': s.completed }">
               <div class="set-col num-col">{{ setIndex + 1 }}</div>
               <div class="set-col">
-                <input 
-                  type="number" 
-                  class="input-large set-input" 
-                  v-model="s.weight" 
-                  placeholder="10"
+                <input
+                  type="number"
+                  class="input-large set-input"
+                  v-model="s.weight"
+                  :placeholder="String(ex.prevSets?.[setIndex]?.weight ?? 10)"
+                  :aria-label="`Set ${setIndex + 1} weight (${workoutStore.weightUnit})`"
                   min="1"
                   :disabled="s.completed"
                 />
               </div>
               <div class="set-col">
-                <input 
-                  type="number" 
-                  class="input-large set-input" 
-                  v-model="s.reps" 
-                  placeholder="8"
+                <input
+                  type="number"
+                  class="input-large set-input"
+                  v-model="s.reps"
+                  :placeholder="String(ex.prevSets?.[setIndex]?.reps ?? 8)"
+                  :aria-label="`Set ${setIndex + 1} reps`"
                   min="1"
+                  :disabled="s.completed"
+                />
+              </div>
+              <div class="set-col rpe-col">
+                <input
+                  type="number"
+                  class="input-large set-input"
+                  v-model="s.rpe"
+                  placeholder="–"
+                  :aria-label="`Set ${setIndex + 1} RPE (optional, 1-10)`"
+                  min="1"
+                  max="10"
                   :disabled="s.completed"
                 />
               </div>
@@ -428,7 +513,7 @@ async function saveWorkout() {
             </div>
             <div class="history-sets-grid">
               <div v-for="(set, sIdx) in entry.sets" :key="set.id" class="history-set-badge">
-                <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}
+                <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template>
               </div>
             </div>
           </div>
@@ -437,3 +522,25 @@ async function saveWorkout() {
     </AppModal>
   </div>
 </template>
+
+<style scoped>
+.ex-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.prev-session-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rpe-col {
+  max-width: 72px;
+}
+</style>

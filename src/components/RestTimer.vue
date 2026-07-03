@@ -17,8 +17,20 @@ const formattedTime = computed(() => {
       <div class="rest-timer-content">
         <div class="rest-label">Rest Timer</div>
         <div class="rest-time">{{ formattedTime }}</div>
-        <button class="btn-danger tap-target" @click="workoutStore.stopRestTimer">Skip</button>
+        <div class="rest-timer-actions">
+          <button class="btn-secondary tap-target" @click="workoutStore.extendRestTimer(30)">+30s</button>
+          <button class="btn-danger tap-target" @click="workoutStore.stopRestTimer">Skip</button>
+        </div>
       </div>
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.rest-timer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+</style>

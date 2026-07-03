@@ -5,6 +5,7 @@ import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useAuthStore } from '../stores/auth'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import AppModal from '../components/AppModal.vue'
 
 import { OverlayScrollbars } from 'overlayscrollbars'
 
@@ -30,9 +31,34 @@ function getProgramDays(programId) {
     .sort((a, b) => a.display_order - b.display_order)
 }
 
+// In-progress session handling: never silently wipe logged sets.
+const showSwitchModal = ref(false)
+const pendingDayId = ref(null)
+
+const inProgressDay = computed(() => {
+  if (!workoutStore.hasActiveSession()) return null
+  return programStore.program_days.find(d => d.id === workoutStore.activeWorkoutDayId) || null
+})
+
 function startWorkout(dayId) {
+  if (workoutStore.hasActiveSession() && workoutStore.activeWorkoutDayId !== dayId) {
+    pendingDayId.value = dayId
+    showSwitchModal.value = true
+    return
+  }
   workoutStore.startWorkout(dayId)
   router.push(`/workout/${dayId}`)
+}
+
+function confirmSwitchWorkout() {
+  showSwitchModal.value = false
+  workoutStore.cancelWorkout()
+  workoutStore.startWorkout(pendingDayId.value)
+  router.push(`/workout/${pendingDayId.value}`)
+}
+
+function resumeWorkout() {
+  router.push(`/workout/${workoutStore.activeWorkoutDayId}`)
 }
 
 function getExerciseCount(day) {
@@ -134,6 +160,23 @@ onMounted(() => {
         <span class="active-label">Active Program</span>
         <span class="active-name">{{ activeProgram.name }}</span>
       </div>
+    </div>
+
+    <!-- Resume In-Progress Workout Banner -->
+    <div v-if="workoutStore.hasActiveSession()" class="resume-banner card mb-24">
+      <div class="resume-banner-info">
+        <span class="resume-label">Workout in progress</span>
+        <span class="resume-details">
+          {{ inProgressDay?.day_name || 'Session' }} · {{ workoutStore.activeWorkoutSets.length }}
+          {{ workoutStore.activeWorkoutSets.length === 1 ? 'set' : 'sets' }} logged
+        </span>
+      </div>
+      <PrimaryButton class="resume-btn" @click="resumeWorkout">
+        <span>Resume</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </PrimaryButton>
     </div>
 
     <!-- Loading Skeleton State -->
@@ -269,10 +312,63 @@ onMounted(() => {
         </router-link>
       </div>
     </div>
+
+    <!-- Confirm discarding the in-progress session before starting another day -->
+    <AppModal
+      v-model:show="showSwitchModal"
+      title="Workout In Progress"
+      :message="`You already have a workout in progress (${inProgressDay?.day_name || 'another day'}, ${workoutStore.activeWorkoutSets.length} sets logged). Starting a new one will discard it. Continue?`"
+      confirm-text="Discard & Start New"
+      cancel-text="Keep Session"
+      @confirm="confirmSwitchWorkout"
+    />
   </div>
 </template>
 
 <style scoped>
+.resume-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(204, 255, 0, 0.35);
+  background: linear-gradient(135deg, rgba(204, 255, 0, 0.06) 0%, var(--bg-surface) 60%);
+}
+
+.resume-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resume-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.resume-details {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.resume-btn {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 18px !important;
+  font-size: 14px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .welcome-banner {
   display: flex;
   justify-content: space-between;
