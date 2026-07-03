@@ -7,6 +7,7 @@ import { useExerciseStore } from '../stores/exercise'
 import { useHistoryStore } from '../stores/history'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import { toKg, formatWeight } from '../utils/units'
 
 const props = defineProps({
   dayId: String
@@ -79,30 +80,75 @@ onMounted(async () => {
     activeWorkoutSession.value = day.value.exercises.map(exId => {
       const exercise = exerciseStore.exercises.find(e => e.id === exId)
       const prevSets = workoutStore.getPreviousSets(exId)
+      const rx = day.value.prescriptions?.[exId] || null
 
-      // Load existing sets logged during this active workout session (from activeWorkoutSets)
+      // Load existing sets logged during this active workout session
+      // (weights are stored in kg; inputs display the user's unit).
       const existingSets = workoutStore.activeWorkoutSets
         .filter(s => s.exercise_id === exId)
         .map(s => ({
           localId: s.id,
-          weight: s.weight,
+          weight: formatWeight(s.weight, workoutStore.weightUnit),
           reps: s.reps,
           rpe: s.rpe ?? '',
+          set_type: s.set_type || 'working',
           completed: true,
           setId: s.id
         }))
 
+    // Prefill empty rows from the prescription so the athlete sees the
+    // planned volume without tapping "Add Set" repeatedly.
+      const sets = existingSets
+      if (sets.length === 0 && rx?.target_sets) {
+        for (let i = 0; i < rx.target_sets; i++) {
+          sets.push({
+            localId: Date.now() + Math.random(),
+            weight: '',
+            reps: '',
+            rpe: '',
+            set_type: 'working',
+            completed: false,
+            setId: null
+          })
+        }
+      }
+
       return {
         id: exId,
         exercise,
+        rx,
         prevSets,
         prevLoad: prevSets.length > 0 ? { weight: prevSets[0].weight, reps: prevSets[0].reps } : null,
-        sets: existingSets
+        sets
       }
     })
   }
   pageLoading.value = false
 })
+
+function rxLabel(rx) {
+  if (!rx) return ''
+  const parts = []
+  if (rx.target_sets) {
+    let reps = ''
+    if (rx.rep_range_min && rx.rep_range_max) reps = `×${rx.rep_range_min}-${rx.rep_range_max}`
+    parts.push(`Target: ${rx.target_sets}${reps}`)
+  }
+  if (rx.target_rpe) parts.push(`@${rx.target_rpe}`)
+  if (rx.rest_seconds) parts.push(`${rx.rest_seconds}s rest`)
+  return parts.join(' · ')
+}
+
+function repPlaceholder(ex, setIndex) {
+  if (ex.rx?.rep_range_min && ex.rx?.rep_range_max) return `${ex.rx.rep_range_min}-${ex.rx.rep_range_max}`
+  const prev = ex.prevSets?.[setIndex]
+  return prev ? String(prev.reps) : '8'
+}
+
+function weightPlaceholder(ex, setIndex) {
+  const prev = ex.prevSets?.[setIndex]
+  return prev ? formatWeight(prev.weight, workoutStore.weightUnit) : '10'
+}
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibility)
@@ -115,7 +161,9 @@ onUnmounted(() => {
 
 function formatPrevSets(prevSets) {
   if (!prevSets || prevSets.length === 0) return ''
-  const shown = prevSets.slice(0, 4).map(s => `${s.weight}×${s.reps}`).join(' · ')
+  const shown = prevSets.slice(0, 4)
+    .map(s => `${formatWeight(s.weight, workoutStore.weightUnit)}×${s.reps}`)
+    .join(' · ')
   return prevSets.length > 4 ? shown + ' …' : shown
 }
 
@@ -125,9 +173,15 @@ function addSet(exIndex) {
     weight: '',
     reps: '',
     rpe: '',
+    set_type: 'working',
     completed: false,
     setId: null
   })
+}
+
+function toggleWarmup(s) {
+  if (s.completed) return
+  s.set_type = s.set_type === 'warmup' ? 'working' : 'warmup'
 }
 
 function removeSet(exIndex, setIndex) {
@@ -139,13 +193,17 @@ function removeSet(exIndex, setIndex) {
 }
 
 function saveSet(exIndex, setIndex) {
-  const s = activeWorkoutSession.value[exIndex].sets[setIndex]
+  const ex = activeWorkoutSession.value[exIndex]
+  const s = ex.sets[setIndex]
   if (s.weight === '' || s.weight === null || s.weight === undefined || s.reps === '' || s.reps === null || s.reps === undefined) return
 
   s.completed = true
 
-  // Save to Pinia
-  s.setId = workoutStore.logSet(activeWorkoutSession.value[exIndex].id, Number(s.weight), Number(s.reps), s.rpe || 0)
+  // Save to Pinia (converted to canonical kg)
+  s.setId = workoutStore.logSet(ex.id, toKg(s.weight, workoutStore.weightUnit), Number(s.reps), s.rpe || 0, {
+    setType: s.set_type,
+    restSeconds: ex.rx?.rest_seconds || null
+  })
 }
 
 function editSet(exIndex, setIndex) {
@@ -316,6 +374,7 @@ async function saveWorkout() {
           <div class="flex-row ex-header ex-header-container">
             <div class="ex-title-block">
               <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
+              <span v-if="rxLabel(ex.rx)" class="rx-target-hint">{{ rxLabel(ex.rx) }}</span>
               <span v-if="ex.prevSets && ex.prevSets.length > 0" class="prev-session-hint">
                 Last: {{ formatPrevSets(ex.prevSets) }}
               </span>
@@ -325,7 +384,7 @@ async function saveWorkout() {
               <button 
                 class="icon-btn-header tap-target" 
                 @click="openExHistory(ex)" 
-                :title="ex.prevLoad ? `Prev: ${ex.prevLoad.weight}${workoutStore.weightUnit} x ${ex.prevLoad.reps}` : 'Exercise History'"
+                :title="ex.prevLoad ? `Prev: ${formatWeight(ex.prevLoad.weight, workoutStore.weightUnit)}${workoutStore.weightUnit} x ${ex.prevLoad.reps}` : 'Exercise History'"
               >
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -356,16 +415,25 @@ async function saveWorkout() {
           </div>
 
           <TransitionGroup name="list-fade" tag="div" class="sets-list-container">
-            <div v-for="(s, setIndex) in ex.sets" :key="s.localId" class="set-row" :class="{ 'is-completed': s.completed }">
-              <div class="set-col num-col">{{ setIndex + 1 }}</div>
+            <div v-for="(s, setIndex) in ex.sets" :key="s.localId" class="set-row" :class="{ 'is-completed': s.completed, 'is-warmup': s.set_type === 'warmup' }">
+              <button
+                class="set-col num-col warmup-toggle"
+                :class="{ 'warmup-toggle--on': s.set_type === 'warmup' }"
+                :disabled="s.completed"
+                @click="toggleWarmup(s)"
+                :title="s.set_type === 'warmup' ? 'Warm-up set (tap for working set)' : 'Tap to mark as warm-up set'"
+                :aria-label="`Set ${setIndex + 1}: toggle warm-up`"
+              >
+                {{ s.set_type === 'warmup' ? 'W' : setIndex + 1 }}
+              </button>
               <div class="set-col">
                 <input
                   type="number"
                   class="input-large set-input"
                   v-model="s.weight"
-                  :placeholder="String(ex.prevSets?.[setIndex]?.weight ?? 10)"
+                  :placeholder="weightPlaceholder(ex, setIndex)"
                   :aria-label="`Set ${setIndex + 1} weight (${workoutStore.weightUnit})`"
-                  min="1"
+                  min="0"
                   :disabled="s.completed"
                 />
               </div>
@@ -374,7 +442,7 @@ async function saveWorkout() {
                   type="number"
                   class="input-large set-input"
                   v-model="s.reps"
-                  :placeholder="String(ex.prevSets?.[setIndex]?.reps ?? 8)"
+                  :placeholder="repPlaceholder(ex, setIndex)"
                   :aria-label="`Set ${setIndex + 1} reps`"
                   min="1"
                   :disabled="s.completed"
@@ -410,7 +478,7 @@ async function saveWorkout() {
                 <PrimaryButton 
                   v-else 
                   class="save-set-btn btn-set-action" 
-                  :disabled="s.weight === '' || s.weight === null || s.weight === undefined || s.weight < 1 || s.reps === '' || s.reps === null || s.reps === undefined || s.reps < 1"
+                  :disabled="s.weight === '' || s.weight === null || s.weight === undefined || s.weight < 0 || s.reps === '' || s.reps === null || s.reps === undefined || s.reps < 1"
                   @click="saveSet(exIndex, setIndex)" 
                   title="Save Set"
                 >
@@ -513,7 +581,7 @@ async function saveWorkout() {
             </div>
             <div class="history-sets-grid">
               <div v-for="(set, sIdx) in entry.sets" :key="set.id" class="history-set-badge">
-                <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template>
+                <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ formatWeight(set.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template>
               </div>
             </div>
           </div>
@@ -542,5 +610,37 @@ async function saveWorkout() {
 
 .rpe-col {
   max-width: 72px;
+}
+
+.rx-target-hint {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.warmup-toggle {
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.warmup-toggle:not(:disabled):hover {
+  border-color: var(--border-color);
+}
+
+.warmup-toggle--on {
+  color: #f9ca24;
+}
+
+.set-row.is-warmup .set-input {
+  opacity: 0.85;
 }
 </style>

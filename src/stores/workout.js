@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import api from '../api'
 import { useHistoryStore } from './history'
 import { useToastStore } from './toast'
+import { detectPRs } from '../utils/stats'
+import { formatWeight } from '../utils/units'
 
 export const useWorkoutStore = defineStore('workout', () => {
   try {
@@ -58,29 +60,51 @@ export const useWorkoutStore = defineStore('workout', () => {
     const payload = {
       program_day_id: typeof activeWorkoutDayId.value === 'number' ? activeWorkoutDayId.value : null,
       date_timestamp: activeWorkoutStartTime.value || new Date().toISOString(),
+      ended_at: new Date().toISOString(),
       sets: activeWorkoutSets.value.map((s, index) => ({
         exercise_id: s.exercise_id,
         weight: s.weight,
         reps: s.reps,
         rpe: s.rpe || null,
+        set_type: s.set_type || 'working',
         set_order: index + 1
       }))
     }
 
     try {
+      const historyStore = useHistoryStore()
+      // Compare against history *before* the new log joins it.
+      const prs = detectPRs(historyStore.workout_logs, payload.sets)
+
       const response = await api.post('/workout-logs', payload)
       if (response.data && response.data.data) {
-        const historyStore = useHistoryStore()
         historyStore.workout_logs.unshift(response.data.data)
       }
       activeWorkoutDayId.value = null
       activeWorkoutStartTime.value = null
       activeWorkoutSets.value = []
       stopRestTimer()
+      celebratePRs(prs)
     } catch (e) {
       console.error(e)
       throw e
     }
+  }
+
+  function celebratePRs(prs) {
+    const toast = useToastStore()
+    const exerciseName = id => {
+      const historyStore = useHistoryStore()
+      for (const log of historyStore.workout_logs) {
+        const s = (log.sets || []).find(x => x.exercise_id === id && x.exercise)
+        if (s) return s.exercise.name
+      }
+      return 'Exercise'
+    }
+    prs.slice(0, 3).forEach(pr => {
+      const w = formatWeight(pr.weight, weightUnit.value)
+      toast.success(`🎉 New PR — ${exerciseName(pr.exercise_id)}: ${w}${weightUnit.value} × ${pr.reps}`, 6000)
+    })
   }
 
   function cancelWorkout() {
@@ -90,20 +114,22 @@ export const useWorkoutStore = defineStore('workout', () => {
     stopRestTimer()
   }
 
-  function logSet(exerciseId, weight, reps, rpe = 0) {
+  // weight arrives already converted to canonical kg by the caller.
+  function logSet(exerciseId, weightKg, reps, rpe = 0, options = {}) {
     if (!activeWorkoutDayId.value) return null
 
     const set = {
       id: 'local-set-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
       exercise_id: exerciseId,
-      weight: parseFloat(weight),
+      weight: Math.round(parseFloat(weightKg) * 100) / 100,
       reps: parseInt(reps),
-      rpe: parseInt(rpe) || null
+      rpe: parseInt(rpe) || null,
+      set_type: options.setType || 'working'
     }
     activeWorkoutSets.value.push(set)
 
     if (timerEnabled.value) {
-      startRestTimer(defaultRestTime.value)
+      startRestTimer(options.restSeconds || defaultRestTime.value)
     }
     return set.id
   }
@@ -229,14 +255,32 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutSets.value = activeWorkoutSets.value.filter(s => s.id !== setId)
   }
 
+  let settingsDebounce = null
+  let pendingSettings = {}
+  // Last state confirmed by the server — used to drop no-op writes when
+  // watchers fire on programmatic changes (e.g. fetchSettings applying).
+  let serverSettings = {}
+
+  function applyServerSettings(s) {
+    timerEnabled.value = !!s.timer_enabled
+    defaultRestTime.value = parseInt(s.default_rest_time)
+    weightUnit.value = s.weight_unit || 'kg'
+    serverSettings = {
+      timer_enabled: !!s.timer_enabled,
+      default_rest_time: parseInt(s.default_rest_time),
+      weight_unit: s.weight_unit || 'kg'
+    }
+  }
+
   async function fetchSettings() {
     loading.value = true
     try {
       const response = await api.get('/user/settings')
-      const s = response.data.data
-      timerEnabled.value = !!s.timer_enabled
-      defaultRestTime.value = parseInt(s.default_rest_time)
-      weightUnit.value = s.weight_unit || 'kg'
+      // If the user changed a setting while this request was in flight,
+      // keep their change — the pending PUT will reconcile the server.
+      if (!settingsDebounce && Object.keys(pendingSettings).length === 0) {
+        applyServerSettings(response.data.data)
+      }
     } catch (e) {
       console.error('Failed to fetch settings:', e)
     } finally {
@@ -244,12 +288,15 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
   }
 
-  let settingsDebounce = null
-  let pendingSettings = {}
-
   function updateSettings(fields) {
+    const changed = {}
+    for (const [key, value] of Object.entries(fields)) {
+      if (serverSettings[key] !== value) changed[key] = value
+    }
+    if (Object.keys(changed).length === 0) return
+
     // Coalesce rapid toggles into one request.
-    pendingSettings = { ...pendingSettings, ...fields }
+    pendingSettings = { ...pendingSettings, ...changed }
     if (settingsDebounce) clearTimeout(settingsDebounce)
     settingsDebounce = setTimeout(flushSettings, 500)
   }
@@ -261,10 +308,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     const toast = useToastStore()
     try {
       const response = await api.put('/user/settings', payload)
-      const s = response.data.data
-      timerEnabled.value = !!s.timer_enabled
-      defaultRestTime.value = parseInt(s.default_rest_time)
-      weightUnit.value = s.weight_unit || 'kg'
+      applyServerSettings(response.data.data)
       toast.success('Settings saved')
     } catch (e) {
       console.error('Failed to update settings:', e)

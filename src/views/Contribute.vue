@@ -17,10 +17,10 @@ const successMessage = ref('')
 const errorMessage = ref('')
 const recentlyAdded = ref([])
 
+// Must match the seeded catalog taxonomy so filtering/grouping stays consistent.
 const muscleGroups = [
-  'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps',
-  'Forearms', 'Quadriceps', 'Hamstrings', 'Glutes',
-  'Calves', 'Abdominals', 'Traps', 'Lats', 'Full Body'
+  'Chest', 'Back', 'Legs', 'Shoulders', 'Biceps',
+  'Triceps', 'Forearms', 'Core', 'Full Body'
 ]
 
 const isFormValid = computed(() => {
@@ -49,7 +49,7 @@ async function submitExercise() {
       mechanics_type: created.mechanics_type
     })
 
-    successMessage.value = `"${created.name}" added successfully!`
+    successMessage.value = `"${created.name}" submitted! You can use it right away; it will appear for everyone once approved.`
     exerciseName.value = ''
     targetMuscleGroup.value = ''
     mechanicsType.value = 'Compound'

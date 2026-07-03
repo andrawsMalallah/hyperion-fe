@@ -7,6 +7,7 @@ import ActiveWorkout from '../views/ActiveWorkout.vue'
 import CreateProgram from '../views/CreateProgram.vue'
 import Settings from '../views/Settings.vue'
 import History from '../views/History.vue'
+import Progress from '../views/Progress.vue'
 import Discover from '../views/Discover.vue'
 import Contribute from '../views/Contribute.vue'
 
@@ -76,6 +77,12 @@ const routes = [
     path: '/history',
     name: 'History',
     component: History,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/progress',
+    name: 'Progress',
+    component: Progress,
     meta: { requiresAuth: true }
   },
   {

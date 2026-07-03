@@ -295,6 +295,22 @@ onMounted(() => {
           </div>
         </TransitionGroup>
 
+        <!-- Quick Action: Progress -->
+        <router-link to="/progress" class="card create-Program-card no-underline mb-24">
+          <div class="create-card-content">
+            <div class="create-icon-circle">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div class="create-text">
+              <span class="create-title-text">View Progress</span>
+              <span class="create-desc-text">1RM trends, weekly volume & PRs</span>
+            </div>
+          </div>
+        </router-link>
+
         <!-- Quick Action: Create Card -->
         <router-link to="/create" class="card create-Program-card no-underline mb-24">
           <div class="create-card-content">

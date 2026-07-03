@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useHistoryStore } from '../stores/history'
 import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import { formatWeight } from '../utils/units'
 
 const router = useRouter()
 const historyStore = useHistoryStore()
@@ -24,8 +25,8 @@ const pastWorkouts = computed(() => {
   return [...rawLogs.value]
     .map(log => {
       const day = log.day
-      const Program = day?.Program
-      
+      const program = day?.program
+
       const sets = log.sets || []
       const numExercises = new Set(sets.map(s => s.exercise_id)).size
       
@@ -47,12 +48,20 @@ const pastWorkouts = computed(() => {
         return group
       })
       
+      let durationMin = null
+      if (log.ended_at) {
+        const ms = new Date(log.ended_at) - new Date(log.date_timestamp)
+        if (ms > 0) durationMin = Math.round(ms / 60000)
+      }
+
       return {
         ...log,
         dateStr: new Date(log.date_timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
         dayName: day ? day.day_name : 'Unknown Day',
-        ProgramName: Program ? Program.name : 'Unknown Program',
-        totalVolume: sets.reduce((acc, s) => acc + (s.weight * s.reps), 0),
+        ProgramName: program ? program.name : 'Unknown Program',
+        // Warm-up sets don't count toward volume.
+        totalVolume: sets.reduce((acc, s) => acc + ((s.set_type || 'working') !== 'warmup' ? s.weight * s.reps : 0), 0),
+        durationMin,
         numExercises,
         numSets: sets.length,
         exerciseGroups
@@ -94,6 +103,13 @@ onUnmounted(() => {
         </svg>
       </button>
       <h1 class="title m-0">Workout History</h1>
+      <router-link to="/progress" class="btn-secondary tap-target no-underline progress-link" style="margin-left: auto; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+          <polyline points="17 6 23 6 23 12"></polyline>
+        </svg>
+        Progress
+      </router-link>
     </div>
 
     <!-- Loading Skeleton (Initial Load) -->
@@ -134,7 +150,11 @@ onUnmounted(() => {
           </div>
           <div class="history-stat-box">
             <span class="stat-label">Total Volume</span>
-            <span class="stat-val">{{ w.totalVolume }} <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ workoutStore.weightUnit }}</span></span>
+            <span class="stat-val">{{ formatWeight(w.totalVolume, workoutStore.weightUnit) }} <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ workoutStore.weightUnit }}</span></span>
+          </div>
+          <div v-if="w.durationMin" class="history-stat-box">
+            <span class="stat-label">Duration</span>
+            <span class="stat-val">{{ w.durationMin }} <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">min</span></span>
           </div>
         </div>
 
@@ -144,8 +164,8 @@ onUnmounted(() => {
             <h4 class="history-ex-name m-0">{{ group.exerciseName }}</h4>
             <div class="history-sets-flex mt-8">
               <div v-for="(set, sIdx) in group.sets" :key="set.id" class="history-set-pill">
-                <span class="set-num-label">S{{ sIdx + 1 }}</span>
-                <span class="set-val-label">{{ set.weight }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
+                <span class="set-num-label">{{ (set.set_type || 'working') === 'warmup' ? 'W' : 'S' + (sIdx + 1) }}</span>
+                <span class="set-val-label">{{ formatWeight(set.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
               </div>
             </div>
           </div>
@@ -235,7 +255,7 @@ onUnmounted(() => {
 
 .history-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   gap: 12px;
   margin-top: 16px;
 }

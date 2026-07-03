@@ -145,6 +145,39 @@ const handleAddExercises = (exerciseIds) => {
   }
 }
 
+// Prescription (target sets / reps / rest) editing per exercise
+const expandedRx = ref(new Set())
+
+const rxKey = (dayId, exId) => `${dayId}:${exId}`
+
+function toggleRx(day, exId) {
+  const d = draftDays.value.find(draft => draft.id === day.id)
+  if (!d) return
+  if (!d.prescriptions) d.prescriptions = {}
+  if (!d.prescriptions[exId]) d.prescriptions[exId] = {}
+  const key = rxKey(day.id, exId)
+  const next = new Set(expandedRx.value)
+  next.has(key) ? next.delete(key) : next.add(key)
+  expandedRx.value = next
+}
+
+function rxSummary(day, exId) {
+  const rx = day.prescriptions?.[exId]
+  if (!rx) return ''
+  const parts = []
+  if (rx.target_sets) {
+    let reps = ''
+    if (rx.rep_range_min && rx.rep_range_max) reps = `×${rx.rep_range_min}-${rx.rep_range_max}`
+    else if (rx.rep_range_min) reps = `×${rx.rep_range_min}+`
+    parts.push(`${rx.target_sets}${reps}`)
+  } else if (rx.rep_range_min && rx.rep_range_max) {
+    parts.push(`${rx.rep_range_min}-${rx.rep_range_max} reps`)
+  }
+  if (rx.target_rpe) parts.push(`@${rx.target_rpe}`)
+  if (rx.rest_seconds) parts.push(`${rx.rest_seconds}s rest`)
+  return parts.join(' · ')
+}
+
 // Dialog States
 const showAddDayModal = ref(false)
 const showSaveSuccessModal = ref(false)
@@ -365,12 +398,30 @@ const getMuscleGroupColor = (group) => {
                       </svg>
                     </button>
                   </div>
-                  <div class="ex-name">{{ element.name }}</div>
+                  <div class="ex-name">
+                    {{ element.name }}
+                    <span v-if="rxSummary(day, element.id)" class="rx-summary">{{ rxSummary(day, element.id) }}</span>
+                  </div>
                   <div class="ex-badge" :style="{ backgroundColor: getMuscleGroupColor(element.target_muscle_group) }">
                     {{ element.target_muscle_group }}
                   </div>
-                  <button 
-                    class="btn-danger tap-target remove-btn" 
+                  <button
+                    class="btn-secondary tap-target rx-toggle-btn"
+                    :class="{ 'rx-toggle-btn--active': expandedRx.has(rxKey(day.id, element.id)) }"
+                    @click="toggleRx(day, element.id)"
+                    title="Set targets (sets / reps / rest)"
+                    aria-label="Edit prescription"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
+                      <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
+                      <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
+                      <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line>
+                      <line x1="17" y1="16" x2="23" y2="16"></line>
+                    </svg>
+                  </button>
+                  <button
+                    class="btn-danger tap-target remove-btn"
                     @click="removeExercise(day, element)"
                     title="Remove Exercise"
                   >
@@ -379,6 +430,29 @@ const getMuscleGroupColor = (group) => {
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
                   </button>
+
+                  <div v-if="expandedRx.has(rxKey(day.id, element.id)) && day.prescriptions?.[element.id]" class="rx-editor">
+                    <label class="rx-field">
+                      <span>Sets</span>
+                      <input type="number" min="1" max="20" v-model.number="day.prescriptions[element.id].target_sets" @input="isDirty = true" placeholder="3" />
+                    </label>
+                    <label class="rx-field">
+                      <span>Reps min</span>
+                      <input type="number" min="1" max="100" v-model.number="day.prescriptions[element.id].rep_range_min" @input="isDirty = true" placeholder="8" />
+                    </label>
+                    <label class="rx-field">
+                      <span>Reps max</span>
+                      <input type="number" min="1" max="100" v-model.number="day.prescriptions[element.id].rep_range_max" @input="isDirty = true" placeholder="12" />
+                    </label>
+                    <label class="rx-field">
+                      <span>RPE</span>
+                      <input type="number" min="1" max="10" v-model.number="day.prescriptions[element.id].target_rpe" @input="isDirty = true" placeholder="–" />
+                    </label>
+                    <label class="rx-field">
+                      <span>Rest (s)</span>
+                      <input type="number" min="0" max="600" step="15" v-model.number="day.prescriptions[element.id].rest_seconds" @input="isDirty = true" placeholder="90" />
+                    </label>
+                  </div>
                 </div>
 
                 <div v-if="day.exerciseObjects.length === 0" key="empty" class="empty-state">
@@ -497,3 +571,79 @@ const getMuscleGroupColor = (group) => {
 
   </div>
 </template>
+
+<style scoped>
+.exercise-item {
+  flex-wrap: wrap;
+}
+
+.rx-summary {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-accent);
+  margin-top: 2px;
+}
+
+.rx-toggle-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rx-toggle-btn--active {
+  color: var(--primary-accent);
+  border-color: var(--primary-accent);
+}
+
+.rx-editor {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.rx-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 70px;
+  min-width: 64px;
+}
+
+.rx-field span {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.rx-field input {
+  width: 100%;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rx-field input:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+</style>

@@ -31,6 +31,44 @@ export const FAMOUS_programs = [
   }
 ]
 
+export const PRESCRIPTION_KEYS = ['target_sets', 'rep_range_min', 'rep_range_max', 'target_rpe', 'rest_seconds', 'notes']
+
+// Normalize an API day into the local shape. Prescriptions live on the
+// pivot per exercise; locally we keep them keyed by exercise id.
+function mapApiDay(d, programId) {
+  const prescriptions = {}
+  d.exercises.forEach(e => {
+    if (e.pivot) {
+      const rx = {}
+      PRESCRIPTION_KEYS.forEach(k => {
+        if (e.pivot[k] !== null && e.pivot[k] !== undefined) rx[k] = e.pivot[k]
+      })
+      if (Object.keys(rx).length > 0) prescriptions[e.id] = rx
+    }
+  })
+  return {
+    id: d.id,
+    program_id: programId,
+    day_name: d.day_name,
+    display_order: d.display_order,
+    exercises: d.exercises.map(e => e.id),
+    prescriptions
+  }
+}
+
+// Build the exercises payload for a day, dropping empty prescription values.
+function dayExercisesPayload(d) {
+  return d.exercises.map(exId => {
+    const entry = { exercise_id: exId }
+    const rx = d.prescriptions?.[exId] || {}
+    PRESCRIPTION_KEYS.forEach(k => {
+      const v = rx[k]
+      if (v !== '' && v !== null && v !== undefined) entry[k] = v
+    })
+    return entry
+  })
+}
+
 export const useProgramStore = defineStore('program', () => {
   const user_programs = ref([])
   const program_days = ref([])
@@ -64,14 +102,8 @@ export const useProgramStore = defineStore('program', () => {
               exerciseStore.exercises.push(e)
             }
           })
-          
-          allDays.push({
-            id: d.id,
-            program_id: s.id,
-            day_name: d.day_name,
-            display_order: d.display_order,
-            exercises: d.exercises.map(e => e.id)
-          })
+
+          allDays.push(mapApiDay(d, s.id))
         })
       })
       program_days.value = allDays
@@ -116,13 +148,7 @@ export const useProgramStore = defineStore('program', () => {
           }
         })
         
-        program_days.value.push({
-          id: d.id,
-          program_id: s.id,
-          day_name: d.day_name,
-          display_order: d.display_order,
-          exercises: d.exercises.map(e => e.id)
-        })
+        program_days.value.push(mapApiDay(d, s.id))
       })
       
       fetchedprogramIds.value.add(idStr)
@@ -164,13 +190,7 @@ export const useProgramStore = defineStore('program', () => {
           }
         })
         
-        program_days.value.push({
-          id: d.id,
-          program_id: s.id,
-          day_name: d.day_name,
-          display_order: d.display_order,
-          exercises: d.exercises.map(e => e.id)
-        })
+        program_days.value.push(mapApiDay(d, s.id))
       })
       
       fetchedprogramIds.value.add(String(s.id))
@@ -209,7 +229,8 @@ export const useProgramStore = defineStore('program', () => {
         program_id: 'draft',
         day_name: dayName,
         display_order: index + 1,
-        exercises: []
+        exercises: [],
+        prescriptions: {}
       }))
     }
   }
@@ -230,7 +251,7 @@ export const useProgramStore = defineStore('program', () => {
       days: draftProgramData.days.map((d, index) => ({
         day_name: d.day_name,
         display_order: index + 1,
-        exercises: d.exercises.map(exId => ({ exercise_id: exId }))
+        exercises: dayExercisesPayload(d)
       }))
     }
 
@@ -249,13 +270,7 @@ export const useProgramStore = defineStore('program', () => {
 
       if (newProgram.days) {
         newProgram.days.forEach(d => {
-          program_days.value.push({
-            id: d.id,
-            program_id: newProgram.id,
-            day_name: d.day_name,
-            display_order: d.display_order,
-            exercises: d.exercises ? d.exercises.map(e => e.id) : []
-          })
+          program_days.value.push(mapApiDay(d, newProgram.id))
         })
       }
 
@@ -277,7 +292,8 @@ export const useProgramStore = defineStore('program', () => {
       program_id: programId,
       day_name: dayName,
       display_order: newOrder,
-      exercises: []
+      exercises: [],
+      prescriptions: {}
     })
   }
 
@@ -324,7 +340,7 @@ export const useProgramStore = defineStore('program', () => {
         const payloadDay = {
           day_name: d.day_name,
           display_order: index + 1,
-          exercises: d.exercises.map(exId => ({ exercise_id: exId }))
+          exercises: dayExercisesPayload(d)
         }
         // If it has a real DB ID, include it so we don't recreate it
         if (typeof d.id === 'number' || (typeof d.id === 'string' && !d.id.startsWith('local-') && !d.id.startsWith('day-draft-'))) {
@@ -350,14 +366,8 @@ export const useProgramStore = defineStore('program', () => {
             exerciseStore.exercises.push(e)
           }
         })
-        
-        program_days.value.push({
-          id: d.id,
-          program_id: updatedProgram.id,
-          day_name: d.day_name,
-          display_order: d.display_order,
-          exercises: d.exercises.map(e => e.id)
-        })
+
+        program_days.value.push(mapApiDay(d, updatedProgram.id))
       })
       
       fetchedprogramIds.value.add(String(programId))
