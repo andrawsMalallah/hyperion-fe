@@ -51,6 +51,7 @@ function mapApiDay(d, programId) {
     program_id: programId,
     day_name: d.day_name,
     display_order: d.display_order,
+    last_performed_at: d.last_performed_at ?? null,
     exercises: d.exercises.map(e => e.id),
     prescriptions
   }

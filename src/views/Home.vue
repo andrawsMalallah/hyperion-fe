@@ -5,7 +5,6 @@ import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useSyncStore } from '../stores/sync'
 import { useAuthStore } from '../stores/auth'
-import { useHistoryStore } from '../stores/history'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import AppModal from '../components/AppModal.vue'
 
@@ -16,7 +15,6 @@ const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const syncStore = useSyncStore()
 const authStore = useAuthStore()
-const historyStore = useHistoryStore()
 
 const userprograms = computed(() => {
   return [...programStore.user_programs].sort((a, b) => {
@@ -72,15 +70,16 @@ function getExerciseCount(day) {
 const activeProgram = computed(() => programStore.user_programs.find(s => s.is_active))
 const expandedprogramId = ref(null)
 
-// Rotation cursor: the active program's least-recently-performed day.
+// Rotation cursor: the active program's least-recently-performed day. Sourced
+// from each day's last_performed_at (carried on the programs payload), so Home
+// needs no separate history fetch.
 const nextUpDayId = computed(() => {
   if (!activeProgram.value) return null
   const days = getProgramDays(activeProgram.value.id)
-  if (days.length < 2 || historyStore.workout_logs.length === 0) return null
+  if (days.length < 2 || !days.some(d => d.last_performed_at)) return null
   let best = null
   for (const day of days) {
-    const lastLog = historyStore.workout_logs.find(l => l.program_day_id === day.id)
-    const lastAt = lastLog ? new Date(lastLog.date_timestamp).getTime() : 0
+    const lastAt = day.last_performed_at ? new Date(day.last_performed_at).getTime() : 0
     if (!best || lastAt < best.lastAt) {
       best = { day, lastAt }
     }
@@ -162,8 +161,6 @@ function leave(el, done) {
 
 onMounted(() => {
   programStore.fetchPrograms()
-  // Needed for the "Up next" suggestion; cached after the first load.
-  historyStore.fetchHistory(false, false)
   if (authStore.isAuthenticated && !authStore.user) {
     authStore.fetchUser()
   }
@@ -292,7 +289,7 @@ onMounted(() => {
         </div>
 
         <!-- Scrollable programs List -->
-        <TransitionGroup name="programs-reorder" tag="div" class="programs-list mb-24">
+        <TransitionGroup v-if="inactiveprograms.length > 0" name="programs-reorder" tag="div" class="programs-list">
           <div 
             v-for="Program in inactiveprograms" 
             :key="Program.id" 
@@ -335,7 +332,7 @@ onMounted(() => {
         </TransitionGroup>
 
         <!-- Quick Action: Progress -->
-        <router-link to="/progress" class="card create-Program-card no-underline mb-24">
+        <router-link to="/progress" class="card create-Program-card no-underline">
           <div class="create-card-content">
             <div class="create-icon-circle">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -351,7 +348,7 @@ onMounted(() => {
         </router-link>
 
         <!-- Quick Action: Create Card -->
-        <router-link to="/create" class="card create-Program-card no-underline mb-24">
+        <router-link to="/create" class="card create-Program-card no-underline">
           <div class="create-card-content">
             <div class="create-icon-circle">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -544,6 +541,22 @@ onMounted(() => {
     align-items: flex-start;
     width: 100%;
   }
+}
+
+/* One consistent vertical rhythm for the right column. The flex gap is the
+   single source of spacing, so the default .card / mb-* bottom margins are
+   zeroed — this removes the oversized gap above the utility cards and, with
+   the saved-programs list only rendered when non-empty, keeps the first card
+   top-aligned with the active program card on the left. */
+.grid-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.grid-col-right > *,
+.programs-list .Program-card {
+  margin-bottom: 0;
 }
 
 .section-header-compact {

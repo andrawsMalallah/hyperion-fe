@@ -4,6 +4,7 @@ import api from '../api'
 import { useHistoryStore } from './history'
 import { useToastStore } from './toast'
 import { useSyncStore } from './sync'
+import { useProgramStore } from './program'
 import { detectPRs } from '../utils/stats'
 import { formatWeight } from '../utils/units'
 
@@ -83,6 +84,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       if (response.data && response.data.data) {
         historyStore.workout_logs.unshift(response.data.data)
       }
+      markDayPerformed(payload.program_day_id, payload.ended_at)
       clearActiveWorkout()
       stopRestTimer()
       celebratePRs(prs)
@@ -94,6 +96,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       // the connection returns, deduped by client_uuid.
       if (!e.response) {
         useSyncStore().enqueue(payload)
+        markDayPerformed(payload.program_day_id, payload.ended_at)
         clearActiveWorkout()
         stopRestTimer()
         celebratePRs(prs)
@@ -111,6 +114,14 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutDayId.value = null
     activeWorkoutStartTime.value = null
     activeWorkoutSets.value = []
+  }
+
+  // Keep the Home "Up next" rotation accurate immediately after finishing,
+  // without waiting for the programs list to revalidate.
+  function markDayPerformed(dayId, when) {
+    if (typeof dayId !== 'number') return
+    const day = useProgramStore().program_days.find(d => d.id === dayId)
+    if (day) day.last_performed_at = when
   }
 
   function newUuid() {
