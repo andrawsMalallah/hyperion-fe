@@ -4,10 +4,10 @@ import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useExerciseStore } from '../stores/exercise'
-import { useHistoryStore } from '../stores/history'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { toKg, formatWeight } from '../utils/units'
+import api from '../api'
 
 const props = defineProps({
   dayId: String
@@ -17,7 +17,6 @@ const router = useRouter()
 const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const exerciseStore = useExerciseStore()
-const historyStore = useHistoryStore()
 
 // If dayId isn't found locally, it's fine, we try to match it.
 // To handle the API type (it could be an integer ID now from the API)
@@ -66,11 +65,13 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibility)
   window.addEventListener('beforeunload', beforeUnloadGuard)
 
-  // Fetch the day and the history (for previous-performance hints) together.
-  await Promise.all([
-    programStore.fetchSingleProgramByDay(parsedDayId),
-    historyStore.fetchHistory(false, false).catch(e => console.error('Failed to load history:', e))
-  ])
+  // Load the day, then just the per-exercise summary it needs (last session +
+  // best e1rm) — not the full workout history.
+  await programStore.fetchSingleProgramByDay(parsedDayId)
+  if (day.value) {
+    await workoutStore.fetchRecentSets(day.value.exercises)
+      .catch(e => console.error('Failed to load recent sets:', e))
+  }
 
   if (workoutStore.activeWorkoutDayId !== parsedDayId) {
     workoutStore.startWorkout(parsedDayId)
@@ -215,49 +216,63 @@ function editSet(exIndex, setIndex) {
   }
 }
 
-// Exercise History Modal
+// Exercise History Modal — loads that exercise's sessions 5 at a time,
+// paginated on scroll, rather than reading the whole workout history.
 const showExHistoryModal = ref(false)
 const selectedExForHistory = ref(null)
-const loadingHistory = ref(false)
+const exHistoryLogs = ref([])
+const exHistoryPage = ref(0)
+const exHistoryLastPage = ref(1)
+const loadingHistory = ref(false)      // first page
+const loadingMoreHistory = ref(false)  // subsequent pages
 
-async function openExHistory(ex) {
+function openExHistory(ex) {
   selectedExForHistory.value = ex
   showExHistoryModal.value = true
-  
-  if (historyStore.workout_logs.length === 0) {
-    loadingHistory.value = true
-    try {
-      await historyStore.fetchHistory(false, false)
-    } catch (e) {
-      console.error('Failed to load history:', e)
-    } finally {
-      loadingHistory.value = false
-    }
+  exHistoryLogs.value = []
+  exHistoryPage.value = 0
+  exHistoryLastPage.value = 1
+  loadExerciseHistory()
+}
+
+async function loadExerciseHistory() {
+  if (loadingHistory.value || loadingMoreHistory.value) return
+  const nextPage = exHistoryPage.value + 1
+  if (nextPage > exHistoryLastPage.value && exHistoryPage.value !== 0) return
+
+  const firstLoad = nextPage === 1
+  if (firstLoad) loadingHistory.value = true
+  else loadingMoreHistory.value = true
+
+  try {
+    const res = await api.get(`/exercises/${selectedExForHistory.value.id}/logs`, {
+      params: { page: nextPage }
+    })
+    const mapped = res.data.data.map(log => ({
+      logId: log.id,
+      date: new Date(log.date_timestamp).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }),
+      sets: log.sets
+    }))
+    exHistoryLogs.value = firstLoad ? mapped : [...exHistoryLogs.value, ...mapped]
+    exHistoryPage.value = res.data.meta?.current_page || nextPage
+    exHistoryLastPage.value = res.data.meta?.last_page || nextPage
+  } catch (e) {
+    console.error('Failed to load exercise history:', e)
+  } finally {
+    loadingHistory.value = false
+    loadingMoreHistory.value = false
   }
 }
 
-const exerciseHistory = computed(() => {
-  if (!selectedExForHistory.value) return []
-  const exId = selectedExForHistory.value.id
-  
-  return historyStore.workout_logs
-    .filter(log => log.sets && log.sets.some(s => s.exercise_id === exId))
-    .map(log => {
-      const sets = log.sets
-        .filter(s => s.exercise_id === exId)
-        .sort((a, b) => a.set_order - b.set_order)
-      return {
-        logId: log.id,
-        date: new Date(log.date_timestamp).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short'
-        }),
-        timestamp: new Date(log.date_timestamp).getTime(),
-        sets
-      }
-    })
-    .sort((a, b) => b.timestamp - a.timestamp)
-})
+function onHistoryScroll(e) {
+  const el = e.target
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) {
+    if (exHistoryPage.value < exHistoryLastPage.value) loadExerciseHistory()
+  }
+}
 
 const showLeaveModal = ref(false)
 const nextRoute = ref(null)
@@ -561,15 +576,15 @@ async function saveWorkout() {
       hide-cancel
       max-width="500px"
     >
-      <div class="history-list-container mb-16">
+      <div class="history-list-container mb-16" @scroll="onHistoryScroll">
         <div v-if="loadingHistory" class="spinner-container py-24 text-center">
           <div class="spinner" style="margin: 0 auto;"></div>
         </div>
-        <div v-else-if="exerciseHistory.length === 0" class="empty-state py-24 text-center">
+        <div v-else-if="exHistoryLogs.length === 0" class="empty-state py-24 text-center">
           No history yet for this exercise.
         </div>
         <div v-else class="history-grid">
-          <div v-for="entry in exerciseHistory" :key="entry.logId" class="history-log-row">
+          <div v-for="entry in exHistoryLogs" :key="entry.logId" class="history-log-row">
             <div class="history-log-date">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -584,6 +599,9 @@ async function saveWorkout() {
                 <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ formatWeight(set.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template>
               </div>
             </div>
+          </div>
+          <div v-if="loadingMoreHistory" class="spinner-container py-12 text-center">
+            <div class="spinner" style="margin: 0 auto;"></div>
           </div>
         </div>
       </div>

@@ -54,10 +54,12 @@ export function weeklyVolume(logs, weeks = 8) {
     .map(([ts, volume]) => ({ weekStart: new Date(ts), volume }))
 }
 
-// Compare a just-finished workout's sets against prior history and return
-// exercises where a new best estimated 1RM was hit.
+// Compare a just-finished workout's sets against each exercise's prior best
+// estimated 1RM and return the exercises where a new best was hit.
+// `previousBestByExercise` maps exercise_id -> prior best e1rm (0/absent means
+// no history, which never counts as a PR).
 // Shape: [{ exercise_id, e1rm, weight, reps, previousBest }]
-export function detectPRs(historyLogs, newSets) {
+export function detectPRs(previousBestByExercise, newSets) {
   const bestNew = new Map()
   for (const s of newSets) {
     if (!isWorkingSet(s)) continue
@@ -71,15 +73,7 @@ export function detectPRs(historyLogs, newSets) {
 
   const prs = []
   for (const [exerciseId, candidate] of bestNew) {
-    let previousBest = 0
-    for (const log of historyLogs) {
-      if (!log.sets) continue
-      for (const s of log.sets) {
-        if (s.exercise_id !== exerciseId || !isWorkingSet(s)) continue
-        const e1rm = epley1RM(s.weight, s.reps)
-        if (e1rm > previousBest) previousBest = e1rm
-      }
-    }
+    const previousBest = Number(previousBestByExercise?.[exerciseId] ?? 0)
     if (previousBest > 0 && candidate.e1rm > previousBest) {
       prs.push({ ...candidate, previousBest })
     }

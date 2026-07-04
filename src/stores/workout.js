@@ -5,6 +5,7 @@ import { useHistoryStore } from './history'
 import { useToastStore } from './toast'
 import { useSyncStore } from './sync'
 import { useProgramStore } from './program'
+import { useExerciseStore } from './exercise'
 import { detectPRs } from '../utils/stats'
 import { formatWeight } from '../utils/units'
 
@@ -28,6 +29,11 @@ export const useWorkoutStore = defineStore('workout', () => {
   const activeWorkoutDayId = ref(null)
   const activeWorkoutSets = ref([]) // local buffer of sets
   const activeWorkoutStartTime = ref(null)
+
+  // Per-exercise summary loaded for the active day: { [exerciseId]: { last:
+  // [sets], best_e1rm } }. Drives the "Last: …" hint and PR detection without
+  // pulling the full workout history.
+  const recentByExercise = ref({})
 
   // Rest Timer State — anchored to a wall-clock end timestamp so the
   // countdown stays correct across refreshes and backgrounded tabs.
@@ -76,12 +82,20 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
 
     const historyStore = useHistoryStore()
-    // Compare against history *before* the new log joins it.
-    const prs = detectPRs(historyStore.workout_logs, payload.sets)
+    // Compare against each exercise's prior best (loaded on the workout screen),
+    // so PR detection needs no full-history fetch.
+    const bestByExercise = {}
+    for (const [id, entry] of Object.entries(recentByExercise.value)) {
+      bestByExercise[id] = entry?.best_e1rm || 0
+    }
+    const prs = detectPRs(bestByExercise, payload.sets)
 
     try {
       const response = await api.post('/workout-logs', payload)
-      if (response.data && response.data.data) {
+      // Only prepend to an already-loaded history list; if History hasn't been
+      // opened yet it will fetch fresh from the server (prepending here would
+      // duplicate the entry once that fetch appends page 1).
+      if (response.data && response.data.data && historyStore.isLoaded) {
         historyStore.workout_logs.unshift(response.data.data)
       }
       markDayPerformed(payload.program_day_id, payload.ended_at)
@@ -136,12 +150,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   function celebratePRs(prs) {
     const toast = useToastStore()
     const exerciseName = id => {
-      const historyStore = useHistoryStore()
-      for (const log of historyStore.workout_logs) {
-        const s = (log.sets || []).find(x => x.exercise_id === id && x.exercise)
-        if (s) return s.exercise.name
-      }
-      return 'Exercise'
+      const ex = useExerciseStore().exercises.find(e => e.id === id)
+      return ex ? ex.name : 'Exercise'
     }
     prs.slice(0, 3).forEach(pr => {
       const w = formatWeight(pr.weight, weightUnit.value)
@@ -176,19 +186,27 @@ export const useWorkoutStore = defineStore('workout', () => {
     return set.id
   }
 
-  // Returns the sets of the most recent logged session for an exercise,
-  // ordered by set_order — used to prefill hints during a workout.
-  function getPreviousSets(exerciseId) {
-    const historyStore = useHistoryStore()
-    for (const log of historyStore.workout_logs) {
-      if (log.sets) {
-        const sets = log.sets
-          .filter(s => s.exercise_id === exerciseId)
-          .sort((a, b) => a.set_order - b.set_order)
-        if (sets.length > 0) return sets
-      }
+  // Fetch the per-exercise summary (last session + best e1rm) for the given
+  // exercises in one request, replacing a full-history load on the workout page.
+  async function fetchRecentSets(exerciseIds) {
+    const ids = [...new Set((exerciseIds || []).filter(id => typeof id === 'number'))]
+    if (ids.length === 0) {
+      recentByExercise.value = {}
+      return
     }
-    return []
+    try {
+      const res = await api.get('/exercises/recent-sets', { params: { ids: ids.join(',') } })
+      recentByExercise.value = res.data.data || {}
+    } catch (e) {
+      console.error('Failed to load recent sets:', e)
+      recentByExercise.value = {}
+    }
+  }
+
+  // The most recent session's sets for an exercise (ordered by set_order) —
+  // used for the "Last: …" hint and to prefill row placeholders.
+  function getPreviousSets(exerciseId) {
+    return recentByExercise.value[exerciseId]?.last || []
   }
 
   function getPreviousLoad(exerciseId) {
@@ -364,6 +382,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutDayId.value = null
     activeWorkoutSets.value = []
     activeWorkoutStartTime.value = null
+    recentByExercise.value = {}
     stopRestTimer()
   }
 
@@ -372,11 +391,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutDayId,
     activeWorkoutSets,
     activeWorkoutStartTime,
+    recentByExercise,
     hasActiveSession,
     startWorkout,
     finishWorkout,
     cancelWorkout,
     logSet,
+    fetchRecentSets,
     getPreviousLoad,
     getPreviousSets,
     restEndsAt,
