@@ -6,6 +6,7 @@ import ToastHost from './components/ToastHost.vue'
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { OverlayScrollbars } from 'overlayscrollbars'
 import { useWorkoutStore } from './stores/workout'
+import { useSyncStore } from './stores/sync'
 import { useAuthStore } from './stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -39,14 +40,20 @@ const closeDropdown = (e) => {
 const handleVisibility = () => {
   if (document.visibilityState === 'visible') {
     useWorkoutStore().resumeRestTimer()
+    useSyncStore().flush()
   }
 }
+
+// Upload any workouts that were finished offline the moment we're back online.
+const handleOnline = () => useSyncStore().flush()
 
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
   document.addEventListener('visibilitychange', handleVisibility)
+  window.addEventListener('online', handleOnline)
   const workoutStore = useWorkoutStore()
   workoutStore.resumeRestTimer()
+  useSyncStore().flush()
 
   // Initialize OverlayScrollbars globally
   OverlayScrollbars(document.body, {
@@ -61,6 +68,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
   document.removeEventListener('visibilitychange', handleVisibility)
+  window.removeEventListener('online', handleOnline)
 })
 
 // Logout confirmation
@@ -81,6 +89,7 @@ watch(isAuthenticated, (newVal) => {
     authStore.fetchUser()
     const workoutStore = useWorkoutStore()
     workoutStore.fetchSettings()
+    useSyncStore().flush()
   }
 }, { immediate: true })
 </script>

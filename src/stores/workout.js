@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import api from '../api'
 import { useHistoryStore } from './history'
 import { useToastStore } from './toast'
+import { useSyncStore } from './sync'
 import { detectPRs } from '../utils/stats'
 import { formatWeight } from '../utils/units'
 
@@ -58,6 +59,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
 
     const payload = {
+      // Stamped once here so a later offline retry is deduped server-side.
+      client_uuid: newUuid(),
       program_day_id: typeof activeWorkoutDayId.value === 'number' ? activeWorkoutDayId.value : null,
       date_timestamp: activeWorkoutStartTime.value || new Date().toISOString(),
       ended_at: new Date().toISOString(),
@@ -71,24 +74,52 @@ export const useWorkoutStore = defineStore('workout', () => {
       }))
     }
 
-    try {
-      const historyStore = useHistoryStore()
-      // Compare against history *before* the new log joins it.
-      const prs = detectPRs(historyStore.workout_logs, payload.sets)
+    const historyStore = useHistoryStore()
+    // Compare against history *before* the new log joins it.
+    const prs = detectPRs(historyStore.workout_logs, payload.sets)
 
+    try {
       const response = await api.post('/workout-logs', payload)
       if (response.data && response.data.data) {
         historyStore.workout_logs.unshift(response.data.data)
       }
-      activeWorkoutDayId.value = null
-      activeWorkoutStartTime.value = null
-      activeWorkoutSets.value = []
+      clearActiveWorkout()
       stopRestTimer()
       celebratePRs(prs)
+      // Opportunistically drain anything queued from an earlier outage.
+      useSyncStore().flush()
     } catch (e) {
+      // No response at all means offline / network failure — not a rejection.
+      // Queue the workout locally and treat it as saved; it will upload when
+      // the connection returns, deduped by client_uuid.
+      if (!e.response) {
+        useSyncStore().enqueue(payload)
+        clearActiveWorkout()
+        stopRestTimer()
+        celebratePRs(prs)
+        useToastStore().push('Saved offline — will sync when you reconnect', 'success', 4000)
+        return
+      }
+      // The server responded with an error (e.g. validation). Keep the
+      // session intact so the user can fix it, and surface the failure.
       console.error(e)
       throw e
     }
+  }
+
+  function clearActiveWorkout() {
+    activeWorkoutDayId.value = null
+    activeWorkoutStartTime.value = null
+    activeWorkoutSets.value = []
+  }
+
+  function newUuid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
   }
 
   function celebratePRs(prs) {

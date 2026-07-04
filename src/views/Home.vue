@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
+import { useSyncStore } from '../stores/sync'
 import { useAuthStore } from '../stores/auth'
 import { useHistoryStore } from '../stores/history'
 import PrimaryButton from '../components/PrimaryButton.vue'
@@ -13,6 +14,7 @@ import { OverlayScrollbars } from 'overlayscrollbars'
 const router = useRouter()
 const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
+const syncStore = useSyncStore()
 const authStore = useAuthStore()
 const historyStore = useHistoryStore()
 
@@ -197,6 +199,20 @@ onMounted(() => {
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </PrimaryButton>
+    </div>
+
+    <!-- Offline workouts awaiting upload -->
+    <div v-if="syncStore.pendingCount() > 0" class="sync-banner card mb-24">
+      <div class="resume-banner-info">
+        <span class="resume-label">Waiting to sync</span>
+        <span class="resume-details">
+          {{ syncStore.pendingCount() }}
+          {{ syncStore.pendingCount() === 1 ? 'workout' : 'workouts' }} saved offline
+        </span>
+      </div>
+      <button class="sync-retry-btn tap-target" :disabled="syncStore.flushing" @click="syncStore.flush()">
+        {{ syncStore.flushing ? 'Syncing…' : 'Retry now' }}
+      </button>
     </div>
 
     <!-- Loading Skeleton State -->
@@ -406,6 +422,45 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.sync-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: linear-gradient(135deg, rgba(240, 180, 41, 0.06) 0%, var(--bg-surface) 60%);
+}
+
+.sync-banner .resume-label {
+  color: #f0b429;
+}
+
+.sync-retry-btn {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 180, 41, 0.45);
+  background: transparent;
+  color: #f0b429;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.sync-retry-btn:hover:not(:disabled) {
+  background-color: rgba(240, 180, 41, 0.1);
+}
+
+.sync-retry-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .welcome-banner {
