@@ -59,10 +59,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutSets.value = []
   }
 
+  // Resolves to 'online' when saved to the server, or 'offline' when queued
+  // locally for later sync. Throws only on a server-side rejection (e.g. 422),
+  // leaving the session intact. Returns null when there is nothing to save.
   async function finishWorkout() {
     if (!activeWorkoutDayId.value || activeWorkoutSets.value.length === 0) {
       cancelWorkout()
-      return
+      return null
     }
 
     const payload = {
@@ -104,6 +107,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       celebratePRs(prs)
       // Opportunistically drain anything queued from an earlier outage.
       useSyncStore().flush()
+      return 'online'
     } catch (e) {
       // No response at all means offline / network failure — not a rejection.
       // Queue the workout locally and treat it as saved; it will upload when
@@ -114,8 +118,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         clearActiveWorkout()
         stopRestTimer()
         celebratePRs(prs)
-        useToastStore().push('Saved offline — will sync when you reconnect', 'success', 4000)
-        return
+        return 'offline'
       }
       // The server responded with an error (e.g. validation). Keep the
       // session intact so the user can fix it, and surface the failure.

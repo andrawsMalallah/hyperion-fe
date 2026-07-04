@@ -90,16 +90,27 @@ const recentPRs = computed(() => {
   return prs.sort((a, b) => b.date - a.date).slice(0, 5)
 })
 
-// ---- Chart geometry (client-measured width; fixed heights)
+// ---- Chart geometry
+// viewWidth is the visible plotting area (the card's inner width). Each chart
+// computes its own content width from the number of data points, so when there
+// are many sessions the SVG grows past the viewport and scrolls horizontally —
+// keeping every label legible instead of cramming them together.
 const chartWrap = ref(null)
-const chartWidth = ref(600)
+const viewWidth = ref(560)
 function measure() {
-  if (chartWrap.value) chartWidth.value = Math.max(280, chartWrap.value.clientWidth)
+  if (chartWrap.value) viewWidth.value = Math.max(240, chartWrap.value.clientWidth - 40)
 }
 
-const PAD = { top: 16, right: 16, bottom: 26, left: 44 }
+// Horizontal scroll offsets, so the (non-scrolling) tooltips can track the
+// point/bar as the chart is scrolled.
+const lineScrollLeft = ref(0)
+const barScrollLeft = ref(0)
+
+const PAD = { top: 16, right: 16, bottom: 30, left: 44 }
 const LINE_H = 220
 const BAR_H = 180
+const LINE_GAP = 64 // min horizontal px between trend points
+const BAR_SLOT = 56 // min horizontal px per weekly bar
 
 const trendPoints = computed(() => {
   if (!selectedExerciseId.value) return []
@@ -109,17 +120,17 @@ const trendPoints = computed(() => {
 const trendGeo = computed(() => {
   const pts = trendPoints.value
   if (pts.length < 2) return null
-  const w = chartWidth.value - PAD.left - PAD.right
+  const contentW = Math.max(viewWidth.value, PAD.left + PAD.right + (pts.length - 1) * LINE_GAP)
+  const w = contentW - PAD.left - PAD.right
   const h = LINE_H - PAD.top - PAD.bottom
-  const xs = pts.map(p => p.date.getTime())
   const ys = pts.map(p => p.e1rm)
-  const xMin = Math.min(...xs)
-  const xMax = Math.max(...xs)
   const yMax = Math.max(...ys) * 1.08
   const yMin = Math.min(...ys) * 0.92
-  const sx = t => PAD.left + (xMax === xMin ? w / 2 : ((t - xMin) / (xMax - xMin)) * w)
+  // Space points evenly by session index (not by calendar gap) so labels never
+  // collide when several sessions fall on nearby dates.
+  const sx = i => PAD.left + (pts.length === 1 ? w / 2 : (i / (pts.length - 1)) * w)
   const sy = v => PAD.top + h - ((v - yMin) / (yMax - yMin)) * h
-  const mapped = pts.map(p => ({ ...p, x: sx(p.date.getTime()), y: sy(p.e1rm) }))
+  const mapped = pts.map((p, i) => ({ ...p, x: sx(i), y: sy(p.e1rm) }))
   const path = mapped.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   // ~4 recessive horizontal gridlines with round-ish values
   const ticks = []
@@ -127,7 +138,7 @@ const trendGeo = computed(() => {
     const v = yMin + ((yMax - yMin) * i) / 3
     ticks.push({ v, y: sy(v) })
   }
-  return { points: mapped, path, ticks }
+  return { points: mapped, path, ticks, width: contentW }
 })
 
 const volumeWeeks = computed(() => weeklyVolume(logs.value, 8))
@@ -135,7 +146,8 @@ const volumeWeeks = computed(() => weeklyVolume(logs.value, 8))
 const barGeo = computed(() => {
   const weeks = volumeWeeks.value
   if (weeks.length === 0) return null
-  const w = chartWidth.value - PAD.left - PAD.right
+  const contentW = Math.max(viewWidth.value, PAD.left + PAD.right + weeks.length * BAR_SLOT)
+  const w = contentW - PAD.left - PAD.right
   const h = BAR_H - PAD.top - PAD.bottom
   const max = Math.max(...weeks.map(x => x.volume)) || 1
   const slot = w / weeks.length
@@ -151,22 +163,39 @@ const barGeo = computed(() => {
       label: entry.weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     }
   })
-  return { bars, baseline: PAD.top + h }
+  return { bars, baseline: PAD.top + h, width: contentW }
 })
 
-// ---- Hover state
+// ---- Hover / tap state
 const lineHover = ref(null)
 const barHover = ref(null)
 
-function onLineMove(e) {
-  if (!trendGeo.value) return
-  const rect = e.currentTarget.getBoundingClientRect()
-  const x = e.clientX - rect.left
+// Map a client X (mouse or touch) to the nearest trend point.
+function nearestPoint(clientX, target) {
+  if (!trendGeo.value) return null
+  const rect = target.getBoundingClientRect()
+  const x = clientX - rect.left
   let nearest = null
   for (const p of trendGeo.value.points) {
     if (!nearest || Math.abs(p.x - x) < Math.abs(nearest.x - x)) nearest = p
   }
-  lineHover.value = nearest
+  return nearest
+}
+
+function onLineMove(e) {
+  lineHover.value = nearestPoint(e.clientX, e.currentTarget)
+}
+
+// Tap-to-inspect on touch devices, where hover doesn't exist.
+function onLineTouch(e) {
+  if (!e.touches[0]) return
+  lineHover.value = nearestPoint(e.touches[0].clientX, e.currentTarget)
+}
+
+// ---- Recent PRs smooth scroll (from the PRs stat tile)
+const recentPRsSection = ref(null)
+function scrollToPRs() {
+  recentPRsSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 const dateFmt = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -177,16 +206,50 @@ const showTable = ref(false)
 <template>
   <div class="progress-page">
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
-      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" aria-label="Back to Home" style="width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" aria-label="Back to Home" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
       <h1 class="title m-0">Progress</h1>
     </div>
 
-    <!-- Loading -->
-    <div v-if="pageLoading" class="card skeleton-pulse" style="height: 220px;"></div>
+    <!-- Loading — mirrors the tiles, filter and chart cards below -->
+    <div v-if="pageLoading" class="progress-skeleton" aria-hidden="true">
+      <!-- Stat tiles: label bar over value bar, in real tile chrome -->
+      <div class="stat-tiles mb-24">
+        <div v-for="n in 3" :key="n" class="card stat-tile">
+          <div class="sk sk-shimmer" style="width: 70%; height: 9px;"></div>
+          <div class="sk sk-shimmer" style="width: 48px; height: 24px;"></div>
+        </div>
+      </div>
+
+      <!-- Filter row: label + select -->
+      <div class="filter-row mb-16">
+        <div class="sk sk-shimmer" style="width: 60px; height: 11px;"></div>
+        <div class="sk sk-shimmer" style="width: 100%; max-width: 400px; height: 40px; border-radius: 8px;"></div>
+      </div>
+
+      <!-- Chart cards: title/subtitle + a chart-shaped placeholder -->
+      <div v-for="n in 2" :key="'c' + n" class="card chart-card mb-24">
+        <div class="sk sk-shimmer" style="width: 45%; height: 15px; margin-bottom: 8px;"></div>
+        <div class="sk sk-shimmer" style="width: 65%; height: 12px; margin-bottom: 16px;"></div>
+        <div class="skel-chart" :style="{ height: n === 1 ? '188px' : '148px' }">
+          <!-- faint y-axis ticks + a run of bars, hinting at the real chart -->
+          <div class="skel-chart-grid">
+            <span v-for="g in 4" :key="g"></span>
+          </div>
+          <div class="skel-chart-bars">
+            <span
+              v-for="(b, i) in (n === 1 ? 7 : 8)"
+              :key="i"
+              class="sk sk-shimmer"
+              :style="{ height: [45, 62, 38, 70, 55, 80, 60, 48][i] + '%' }"
+            ></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Empty -->
     <div v-else-if="logs.length === 0" class="empty-state card py-40 text-center">
@@ -207,10 +270,16 @@ const showTable = ref(false)
           <span class="tile-label">Volume this week</span>
           <span class="tile-value">{{ formatWeight(weekStats.volume, unit) }}<span class="tile-unit">{{ unit }}</span></span>
         </div>
-        <div class="card stat-tile">
+        <button
+          type="button"
+          class="card stat-tile stat-tile--action"
+          :disabled="recentPRs.length === 0"
+          @click="scrollToPRs"
+          title="Jump to Recent PRs"
+        >
           <span class="tile-label">PRs (recent)</span>
           <span class="tile-value">{{ recentPRs.length }}</span>
-        </div>
+        </button>
       </div>
 
       <!-- Filter row -->
@@ -224,46 +293,47 @@ const showTable = ref(false)
       <!-- Est. 1RM trend -->
       <div class="card chart-card mb-24" ref="chartWrap">
         <h2 class="chart-title">Estimated 1RM ({{ unit }})</h2>
-        <p class="chart-sub">Best working set per session, Epley formula</p>
+        <p class="chart-sub">Best working set per session · Epley: weight × (1 + reps ÷ 30)</p>
 
         <div v-if="!trendGeo" class="chart-empty">Need at least two sessions of this exercise to draw a trend.</div>
         <div v-else class="chart-holder">
-          <svg :width="chartWidth" :height="LINE_H" @mousemove="onLineMove" @mouseleave="lineHover = null" role="img" :aria-label="`Estimated one rep max trend, ${trendPoints.length} sessions`">
-            <!-- recessive grid -->
-            <g v-for="t in trendGeo.ticks" :key="t.y">
-              <line :x1="PAD.left" :x2="chartWidth - PAD.right" :y1="t.y" :y2="t.y" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-              <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">{{ formatWeight(t.v, unit) }}</text>
-            </g>
-            <!-- series -->
-            <path :d="trendGeo.path" fill="none" :stroke="DATA_COLOR" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-            <!-- points: small always, 8px ring on hover -->
-            <circle
-              v-for="p in trendGeo.points"
-              :key="p.x"
-              :cx="p.x" :cy="p.y"
-              :r="lineHover && lineHover.x === p.x ? 5 : 3"
-              :fill="DATA_COLOR"
-              stroke="#1E1E1E"
-              stroke-width="2"
-            />
-            <!-- crosshair -->
-            <line v-if="lineHover" :x1="lineHover.x" :x2="lineHover.x" :y1="PAD.top" :y2="LINE_H - PAD.bottom" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
-            <!-- selective direct label: last point only -->
-            <text
-              v-if="trendGeo.points.length"
-              :x="trendGeo.points[trendGeo.points.length - 1].x"
-              :y="trendGeo.points[trendGeo.points.length - 1].y - 10"
-              text-anchor="end"
-              class="direct-label"
-            >{{ formatWeight(trendGeo.points[trendGeo.points.length - 1].e1rm, unit) }}{{ unit }}</text>
-            <!-- x labels: first and last date -->
-            <text :x="trendGeo.points[0].x" :y="LINE_H - 8" text-anchor="start" class="axis-text">{{ dateFmt(trendGeo.points[0].date) }}</text>
-            <text :x="trendGeo.points[trendGeo.points.length - 1].x" :y="LINE_H - 8" text-anchor="end" class="axis-text">{{ dateFmt(trendGeo.points[trendGeo.points.length - 1].date) }}</text>
-          </svg>
+          <div class="chart-scroll" @scroll="lineScrollLeft = $event.target.scrollLeft">
+            <svg :width="trendGeo.width" :height="LINE_H" @mousemove="onLineMove" @mouseleave="lineHover = null" @touchstart="onLineTouch" role="img" :aria-label="`Estimated one rep max trend, ${trendPoints.length} sessions`">
+              <!-- recessive grid -->
+              <g v-for="t in trendGeo.ticks" :key="t.y">
+                <line :x1="PAD.left" :x2="trendGeo.width - PAD.right" :y1="t.y" :y2="t.y" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+                <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">{{ formatWeight(t.v, unit) }}</text>
+              </g>
+              <!-- series -->
+              <path :d="trendGeo.path" fill="none" :stroke="DATA_COLOR" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+              <!-- points: small always, larger ring on hover/tap -->
+              <circle
+                v-for="p in trendGeo.points"
+                :key="p.x"
+                :cx="p.x" :cy="p.y"
+                :r="lineHover && lineHover.x === p.x ? 5 : 3"
+                :fill="DATA_COLOR"
+                stroke="#1E1E1E"
+                stroke-width="2"
+              />
+              <!-- crosshair -->
+              <line v-if="lineHover" :x1="lineHover.x" :x2="lineHover.x" :y1="PAD.top" :y2="LINE_H - PAD.bottom" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+              <!-- selective direct label: last point only -->
+              <text
+                v-if="trendGeo.points.length"
+                :x="trendGeo.points[trendGeo.points.length - 1].x"
+                :y="trendGeo.points[trendGeo.points.length - 1].y - 10"
+                text-anchor="end"
+                class="direct-label"
+              >{{ formatWeight(trendGeo.points[trendGeo.points.length - 1].e1rm, unit) }}{{ unit }}</text>
+              <!-- x labels: every session date (chart scrolls to keep them legible) -->
+              <text v-for="(p, i) in trendGeo.points" :key="'xl' + i" :x="p.x" :y="LINE_H - 10" text-anchor="middle" class="axis-text">{{ dateFmt(p.date) }}</text>
+            </svg>
+          </div>
           <div
             v-if="lineHover"
             class="chart-tooltip"
-            :style="{ left: Math.min(lineHover.x + 10, chartWidth - 150) + 'px', top: (lineHover.y - 14) + 'px' }"
+            :style="{ left: Math.max(8, Math.min(lineHover.x - lineScrollLeft + 10, viewWidth - 150)) + 'px', top: (lineHover.y - 14) + 'px' }"
           >
             <strong>{{ dateFmt(lineHover.date) }}</strong>
             {{ formatWeight(lineHover.weight, unit) }}{{ unit }} × {{ lineHover.reps }}
@@ -279,24 +349,26 @@ const showTable = ref(false)
 
         <div v-if="!barGeo" class="chart-empty">No volume yet.</div>
         <div v-else class="chart-holder">
-          <svg :width="chartWidth" :height="BAR_H" role="img" aria-label="Weekly training volume">
-            <line :x1="PAD.left" :x2="chartWidth - PAD.right" :y1="barGeo.baseline" :y2="barGeo.baseline" stroke="rgba(255,255,255,0.14)" stroke-width="1" />
-            <g v-for="(b, i) in barGeo.bars" :key="i" @mouseenter="barHover = b" @mouseleave="barHover = null">
-              <!-- oversized hit target -->
-              <rect :x="b.x - 4" :y="PAD.top" :width="b.w + 8" :height="barGeo.baseline - PAD.top" fill="transparent" />
-              <!-- rounded top, flat baseline: rounded rect clipped at the bottom -->
-              <path
-                :d="`M${b.x},${barGeo.baseline} V${b.y + 4} Q${b.x},${b.y} ${b.x + 4},${b.y} H${b.x + b.w - 4} Q${b.x + b.w},${b.y} ${b.x + b.w},${b.y + 4} V${barGeo.baseline} Z`"
-                :fill="DATA_COLOR"
-                :opacity="barHover && barHover.x === b.x ? 1 : 0.85"
-              />
-              <text :x="b.x + b.w / 2" :y="BAR_H - 8" text-anchor="middle" class="axis-text">{{ b.label }}</text>
-            </g>
-          </svg>
+          <div class="chart-scroll" @scroll="barScrollLeft = $event.target.scrollLeft">
+            <svg :width="barGeo.width" :height="BAR_H" role="img" aria-label="Weekly training volume">
+              <line :x1="PAD.left" :x2="barGeo.width - PAD.right" :y1="barGeo.baseline" :y2="barGeo.baseline" stroke="rgba(255,255,255,0.14)" stroke-width="1" />
+              <g v-for="(b, i) in barGeo.bars" :key="i" @mouseenter="barHover = b" @mouseleave="barHover = null" @touchstart="barHover = b">
+                <!-- oversized hit target -->
+                <rect :x="b.x - 4" :y="PAD.top" :width="b.w + 8" :height="barGeo.baseline - PAD.top" fill="transparent" />
+                <!-- rounded top, flat baseline: rounded rect clipped at the bottom -->
+                <path
+                  :d="`M${b.x},${barGeo.baseline} V${b.y + 4} Q${b.x},${b.y} ${b.x + 4},${b.y} H${b.x + b.w - 4} Q${b.x + b.w},${b.y} ${b.x + b.w},${b.y + 4} V${barGeo.baseline} Z`"
+                  :fill="DATA_COLOR"
+                  :opacity="barHover && barHover.x === b.x ? 1 : 0.85"
+                />
+                <text :x="b.x + b.w / 2" :y="BAR_H - 10" text-anchor="middle" class="axis-text">{{ b.label }}</text>
+              </g>
+            </svg>
+          </div>
           <div
             v-if="barHover"
             class="chart-tooltip"
-            :style="{ left: Math.min(barHover.x, chartWidth - 150) + 'px', top: (barHover.y - 14) + 'px' }"
+            :style="{ left: Math.max(8, Math.min(barHover.x - barScrollLeft, viewWidth - 150)) + 'px', top: (barHover.y - 14) + 'px' }"
           >
             <strong>Wk of {{ barHover.label }}</strong>
             {{ formatWeight(barHover.volume, unit) }}{{ unit }}
@@ -305,7 +377,7 @@ const showTable = ref(false)
       </div>
 
       <!-- Recent PRs -->
-      <div class="card chart-card mb-24" v-if="recentPRs.length > 0">
+      <div class="card chart-card mb-24" v-if="recentPRs.length > 0" ref="recentPRsSection">
         <h2 class="chart-title">Recent PRs</h2>
         <div class="pr-list">
           <div v-for="(pr, i) in recentPRs" :key="i" class="pr-row">
@@ -349,9 +421,87 @@ const showTable = ref(false)
   gap: 12px;
 }
 
+/* --- Loading skeleton --- */
+/* Skeleton primitives with a moving sheen (matches Home/History), shaped like
+   the real content below so the transition into loaded state doesn't jump. */
+.sk {
+  background: var(--bg-surface-hover);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sk-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.sk-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+  animation: sk-sheen 1.4s infinite;
+}
+
+@keyframes sk-sheen {
+  100% { transform: translateX(100%); }
+}
+
+/* Chart placeholder: a bordered plot area with faint gridlines and a row of
+   varied-height bars, so it reads as a chart rather than a blank block. */
+.skel-chart {
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 12px 12px 12px 40px;
+}
+
+.skel-chart-grid {
+  position: absolute;
+  inset: 12px 12px 12px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.skel-chart-grid span {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.skel-chart-bars {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.skel-chart-bars .sk {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-shimmer::after {
+    animation: none;
+  }
+}
+
 @media (max-width: 480px) {
   .stat-tiles {
     grid-template-columns: 1fr 1fr;
+    /* Equal horizontal and vertical spacing between the 2-then-1 tiles. */
+    column-gap: 8px;
+    row-gap: 8px;
   }
 }
 
@@ -361,6 +511,26 @@ const showTable = ref(false)
   gap: 6px;
   padding: 16px;
   border: 1px solid var(--border-color);
+  /* Base .card adds margin-bottom:16px; inside the grid that stacks onto the
+     row-gap and makes the vertical gap larger than the horizontal one. */
+  margin-bottom: 0;
+}
+
+/* PRs tile doubles as a jump-to-Recent-PRs button */
+.stat-tile--action {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.stat-tile--action:not(:disabled):hover {
+  border-color: var(--primary-accent);
+  transform: translateY(-1px);
+}
+
+.stat-tile--action:disabled {
+  cursor: default;
 }
 
 .tile-label {
@@ -387,8 +557,9 @@ const showTable = ref(false)
 
 .filter-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .filter-label {
@@ -400,8 +571,8 @@ const showTable = ref(false)
 }
 
 .exercise-select {
-  flex: 1;
-  max-width: 320px;
+  width: 100%;
+  max-width: 400px;
   background-color: var(--bg-surface);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
@@ -437,6 +608,20 @@ const showTable = ref(false)
 
 .chart-holder {
   position: relative;
+}
+
+/* Horizontally scrollable chart area with the scrollbar hidden — many
+   sessions grow the SVG past the viewport, keeping every label legible. */
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .chart-empty {

@@ -212,14 +212,50 @@ onMounted(() => {
       </button>
     </div>
 
-    <!-- Loading Skeleton State -->
-    <div v-if="programStore.loading && !programStore.isListLoaded" class="dashboard-grid">
+    <!-- Loading Skeleton State — mirrors the real dashboard layout -->
+    <div v-if="programStore.loading && !programStore.isListLoaded" class="dashboard-grid" aria-hidden="true">
+      <!-- Left Column: Active Program showcase -->
       <div class="grid-col-left">
-        <div class="skeleton-card skeleton-pulse" style="height: 280px; margin-bottom: 24px;"></div>
+        <div class="section-header-compact mb-12">
+          <div class="skeleton-line skeleton-pulse" style="width: 120px; height: 13px;"></div>
+        </div>
+        <div class="active-Program-showcase card">
+          <div class="showcase-header">
+            <div class="skeleton-line skeleton-pulse" style="width: 180px; height: 22px;"></div>
+            <div class="skeleton-box skeleton-pulse" style="width: 36px; height: 36px; border-radius: 8px;"></div>
+          </div>
+          <div class="showcase-days-list mt-16">
+            <div v-for="n in 4" :key="n" class="showcase-day-row">
+              <div class="day-details">
+                <div class="skeleton-line skeleton-pulse" style="width: 110px; height: 16px;"></div>
+                <div class="skeleton-line skeleton-pulse" style="width: 70px; height: 13px;"></div>
+              </div>
+              <div class="skeleton-box skeleton-pulse" style="width: 84px; height: 38px; border-radius: 8px;"></div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- Right Column: Saved programs + utility cards -->
       <div class="grid-col-right">
-        <div class="skeleton-card skeleton-pulse" style="height: 140px; margin-bottom: 24px;"></div>
-        <div class="skeleton-card skeleton-pulse" style="height: 100px;"></div>
+        <div class="section-header-compact mb-12">
+          <div class="skeleton-line skeleton-pulse" style="width: 130px; height: 13px;"></div>
+        </div>
+        <div v-for="n in 2" :key="n" class="Program-card card">
+          <div class="Program-card-header">
+            <div class="skeleton-line skeleton-pulse" style="width: 150px; height: 16px;"></div>
+            <div class="skeleton-line skeleton-pulse" style="width: 48px; height: 13px;"></div>
+          </div>
+        </div>
+        <div v-for="n in 2" :key="'util-' + n" class="card create-Program-card">
+          <div class="create-card-content">
+            <div class="skeleton-box skeleton-pulse" style="width: 42px; height: 42px; border-radius: 50%;"></div>
+            <div class="create-text" style="gap: 6px;">
+              <div class="skeleton-line skeleton-pulse" style="width: 160px; height: 16px;"></div>
+              <div class="skeleton-line skeleton-pulse" style="width: 200px; height: 13px;"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -559,6 +595,20 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+/* The active-program card is the last child of the left column; its default
+   .card bottom margin made the greeting→active gap (24px) smaller than the
+   active→saved gap (24px grid gap + 16px card margin) when stacked. Drop it so
+   both gaps are an even 24px. */
+.grid-col-left > .active-Program-showcase,
+.grid-col-left > .empty-active-card {
+  margin-bottom: 0;
+}
+
+/* Breathing room under the last utility card at the bottom of the page. */
+.grid-col-right > :last-child {
+  margin-bottom: 16px;
+}
+
 .section-header-compact {
   display: flex;
   align-items: center;
@@ -837,6 +887,15 @@ onMounted(() => {
   position: relative;
   overflow: hidden;
   margin-bottom: 16px;
+}
+
+/* Content-shaped skeleton primitives: a text line and a solid block. They sit
+   inside the real layout cards so the loading state matches the loaded one. */
+.skeleton-line,
+.skeleton-box {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .skeleton-pulse {

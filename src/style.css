@@ -407,20 +407,26 @@ body {
 
 .set-col {
   flex: 1;
+  min-width: 0;
   padding: 0 4px;
+  text-align: center;
 }
 
 .num-col {
-  flex: 0 0 40px;
-  text-align: center;
+  flex: 0 0 24px;
+  text-align: left;
+  padding: 0;
   font-weight: 700;
   color: var(--text-secondary);
 }
 
 .action-col {
-  flex: 0 0 100px;
+  flex: 0 0 84px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  padding: 0;
+  /* breathing room between the RPE input and the action buttons */
+  margin-left: 8px;
 }
 
 .action-col-flex {
@@ -432,6 +438,9 @@ body {
   text-align: center;
   height: 38px;
   font-size: 15px;
+  /* override .input-large's 16px side padding — these columns are narrow, so
+     the wide padding left no room for the kg / Reps / RPE placeholder text */
+  padding: 0 4px;
   border-radius: 6px;
   background-color: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-color);
@@ -455,10 +464,10 @@ body {
 }
 
 .btn-set-action {
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
   border-radius: 8px !important;
   padding: 0 !important;
   display: inline-flex !important;
@@ -625,7 +634,7 @@ body {
   background-color: #2A2A2A;
   color: var(--text-secondary);
   font-size: 11px;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
 }
@@ -657,12 +666,15 @@ body {
 .days-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 24px;
 }
 
 .day-card {
   display: flex;
   flex-direction: column;
+  /* spacing between days comes from the panel gap; dropping the base .card
+     margin keeps a single 24px rhythm and lets the error card sit evenly. */
+  margin-bottom: 0;
 }
 
 .day-header {
@@ -680,8 +692,8 @@ body {
 }
 
 .day-action-btn {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -720,7 +732,8 @@ body {
   background-color: var(--bg-surface);
 }
 
-/* shared base for all three buttons */
+/* shared base for all segment buttons */
+.builder-visibility-btn,
 .builder-delete-btn,
 .builder-add-day-btn,
 .builder-save-btn {
@@ -729,6 +742,7 @@ body {
   justify-content: center;
   gap: 7px;
   height: 52px;
+  min-width: 0;
   padding: 0 18px;
   font-size: 14px;
   font-weight: 600;
@@ -737,6 +751,43 @@ body {
   cursor: pointer;
   transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
   white-space: nowrap;
+}
+
+/* Narrow screens: tighten so all segments fit without clipping. */
+@media (max-width: 400px) {
+  .builder-visibility-btn,
+  .builder-delete-btn,
+  .builder-add-day-btn,
+  .builder-save-btn {
+    padding: 0 8px;
+    gap: 5px;
+    font-size: 13px;
+  }
+}
+
+/* Visibility — left segment; public state picks up the accent */
+.builder-visibility-btn {
+  flex: 1;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
+  font-weight: 700;
+}
+
+/* Hover only on real pointers — on touch, :hover sticks after a tap and the
+   segment stays highlighted after toggling. */
+@media (hover: hover) {
+  .builder-visibility-btn:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+  }
+
+  .builder-visibility-btn--public:hover {
+    background-color: rgba(204, 255, 0, 0.06);
+  }
+}
+
+.builder-visibility-btn--public {
+  color: var(--primary-accent);
 }
 
 /* Delete — left segment */
@@ -875,10 +926,10 @@ body {
 }
 
 .remove-btn {
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
   border-radius: 8px !important;
   padding: 0 !important;
   margin-left: 8px;
@@ -1394,6 +1445,7 @@ body.modal-open {
 .ex-header-container {
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .ex-header-right {
@@ -1409,12 +1461,12 @@ body.modal-open {
 
 .action-col-flex {
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .btn-set-action {
-  padding: 0 12px;
-  min-height: 44px;
+  padding: 0;
+  min-height: 38px;
 }
 
 .history-list-container {
@@ -1551,7 +1603,7 @@ body.modal-open {
 .skeleton-set-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   height: 48px;
 }
 
@@ -1564,12 +1616,17 @@ body.modal-open {
 
 .skeleton-bar.input-bar {
   flex: 1;
-  height: 40px;
+  height: 38px;
+}
+
+.skeleton-bar.rpe-bar {
+  flex: 0 0 56px;
 }
 
 .skeleton-bar.btn-bar {
-  width: 90px;
-  height: 40px;
+  flex: 0 0 88px;
+  width: 88px;
+  height: 38px;
 }
 
 /* Custom styled scrollbar (OverlayScrollbars) */
@@ -1620,14 +1677,15 @@ body.modal-open {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .icon-btn-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-surface);

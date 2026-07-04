@@ -97,8 +97,8 @@ onUnmounted(() => {
   <div class="history-page">
     <!-- Header with Back Button -->
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
-      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" style="width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
@@ -112,16 +112,34 @@ onUnmounted(() => {
       </router-link>
     </div>
 
-    <!-- Loading Skeleton (Initial Load) -->
-    <div v-if="loading && pastWorkouts.length === 0" class="history-list">
-      <div v-for="n in 3" :key="n" class="card history-card mb-24 skeleton-pulse" style="min-height: 200px;">
-        <div class="history-header pb-12" style="border-bottom: 1px solid var(--border-color);">
-          <div class="skeleton-bar title-bar" style="width: 140px; height: 18px; margin-bottom: 8px;"></div>
-          <div class="skeleton-bar text-bar" style="width: 100px; height: 14px; margin-bottom: 6px;"></div>
-          <div class="skeleton-bar text-bar" style="width: 80px; height: 12px;"></div>
+    <!-- Loading Skeleton (Initial Load) — mirrors the real workout card -->
+    <div v-if="loading && pastWorkouts.length === 0" class="history-list" aria-hidden="true">
+      <div v-for="n in 3" :key="n" class="card history-card mb-24">
+        <!-- Header: left day/program info + right date badge -->
+        <div class="history-header pb-12 sk-header">
+          <div class="header-main-info">
+            <div class="sk sk-shimmer" style="width: 150px; height: 20px;"></div>
+            <div class="sk sk-shimmer" style="width: 100px; height: 13px;"></div>
+          </div>
+          <div class="sk sk-shimmer" style="width: 110px; height: 24px; border-radius: 6px;"></div>
         </div>
-        <div class="history-stats-grid mb-16" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px;">
-          <div v-for="i in 3" :key="i" class="skeleton-bar" style="height: 52px; border-radius: 8px; background: var(--bg-surface-hover);"></div>
+
+        <!-- Stats grid: 3 tiles matching the real summary -->
+        <div class="history-stats-grid mb-24">
+          <div v-for="i in 3" :key="i" class="history-stat-box sk-stat-box">
+            <div class="sk sk-shimmer" style="width: 54px; height: 9px; margin-bottom: 8px;"></div>
+            <div class="sk sk-shimmer" style="width: 36px; height: 18px;"></div>
+          </div>
+        </div>
+
+        <!-- Two exercise-group placeholders with set pills -->
+        <div class="history-exercises-list">
+          <div v-for="i in 2" :key="'ex-' + i" class="history-exercise-group">
+            <div class="sk sk-shimmer" style="width: 130px; height: 14px;"></div>
+            <div class="history-sets-flex mt-8">
+              <div v-for="p in (i === 1 ? 4 : 3)" :key="p" class="sk sk-shimmer" style="width: 82px; height: 24px; border-radius: 6px;"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -139,7 +157,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Stats Grid (Premium visual summary) -->
-        <div class="history-stats-grid mb-20">
+        <div class="history-stats-grid mb-24">
           <div class="history-stat-box">
             <span class="stat-label">Exercises</span>
             <span class="stat-val">{{ w.numExercises }}</span>
@@ -160,7 +178,7 @@ onUnmounted(() => {
 
         <!-- Exercises and Logged Sets list -->
         <div v-if="w.exerciseGroups && w.exerciseGroups.length > 0" class="history-exercises-list">
-          <div v-for="(group, idx) in w.exerciseGroups" :key="idx" class="history-exercise-group mb-16">
+          <div v-for="(group, idx) in w.exerciseGroups" :key="idx" class="history-exercise-group">
             <h4 class="history-ex-name m-0">{{ group.exerciseName }}</h4>
             <div class="history-sets-flex mt-8">
               <div v-for="(set, sIdx) in group.sets" :key="set.id" class="history-set-pill">
@@ -260,6 +278,13 @@ onUnmounted(() => {
   margin-top: 16px;
 }
 
+/* Small screens: 2×2 instead of the lopsided 3-then-1 auto-fit row. */
+@media (max-width: 520px) {
+  .history-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .history-stat-box {
   display: flex;
   flex-direction: column;
@@ -290,7 +315,7 @@ onUnmounted(() => {
 .history-exercises-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .history-exercise-group {
@@ -335,5 +360,59 @@ onUnmounted(() => {
   padding: 4px 8px;
   color: var(--text-primary);
   font-weight: 600;
+}
+
+/* --- Loading skeleton --- */
+/* A skeleton block with a moving sheen, so the placeholders feel alive rather
+   than flat gray. Shapes reuse the real card layout (.history-header,
+   .history-stats-grid, .history-exercise-group) for a zero-shift transition. */
+.sk {
+  background: var(--bg-surface-hover);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sk-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.sk-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+  animation: sk-sheen 1.4s infinite;
+}
+
+@keyframes sk-sheen {
+  100% { transform: translateX(100%); }
+}
+
+/* Skeleton header aligns its two rows to the top like the real one. */
+.sk-header {
+  align-items: flex-start;
+}
+
+.sk-header .header-main-info {
+  gap: 8px;
+}
+
+/* Skeleton stat tiles keep the real tile chrome but drop the text centering
+   so the two bars stack naturally. */
+.sk-stat-box {
+  gap: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-shimmer::after {
+    animation: none;
+  }
 }
 </style>

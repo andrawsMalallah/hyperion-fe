@@ -140,17 +140,6 @@ function rxLabel(rx) {
   return parts.join(' · ')
 }
 
-function repPlaceholder(ex, setIndex) {
-  if (ex.rx?.rep_range_min && ex.rx?.rep_range_max) return `${ex.rx.rep_range_min}-${ex.rx.rep_range_max}`
-  const prev = ex.prevSets?.[setIndex]
-  return prev ? String(prev.reps) : '8'
-}
-
-function weightPlaceholder(ex, setIndex) {
-  const prev = ex.prevSets?.[setIndex]
-  return prev ? formatWeight(prev.weight, workoutStore.weightUnit) : '10'
-}
-
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibility)
   window.removeEventListener('beforeunload', beforeUnloadGuard)
@@ -278,6 +267,20 @@ const showLeaveModal = ref(false)
 const nextRoute = ref(null)
 const isLeaving = ref(false)
 
+// Post-save confirmation modal (Item 1)
+const showSavedModal = ref(false)
+const savedOffline = ref(false)
+
+// The workout is already saved by the time this modal shows, so any dismissal
+// (Go Home, Escape, or backdrop) routes home. Guarded against a double push.
+let navigatingHome = false
+function goHome() {
+  if (navigatingHome) return
+  navigatingHome = true
+  showSavedModal.value = false
+  router.push('/')
+}
+
 const hasCompletedSets = computed(() => {
   return activeWorkoutSession.value.some(ex => ex.sets.some(s => s.completed))
 })
@@ -339,10 +342,13 @@ async function saveWorkout() {
 
   try {
     isSaving.value = true
-    await workoutStore.finishWorkout()
+    const outcome = await workoutStore.finishWorkout()
+    // Session is saved (server) or safely queued (offline) — allow navigation
+    // past the unsaved-changes guard and surface the result in a modal.
     isLeaving.value = true
     isSaving.value = false
-    router.push('/')
+    savedOffline.value = outcome === 'offline'
+    showSavedModal.value = true
   } catch (error) {
     isSaving.value = false
     isLeaving.value = false
@@ -377,6 +383,7 @@ async function saveWorkout() {
                 <div class="skeleton-circle-small"></div>
                 <div class="skeleton-bar input-bar"></div>
                 <div class="skeleton-bar input-bar"></div>
+                <div class="skeleton-bar input-bar rpe-bar"></div>
                 <div class="skeleton-bar btn-bar"></div>
               </div>
             </div>
@@ -401,7 +408,7 @@ async function saveWorkout() {
                 @click="openExHistory(ex)" 
                 :title="ex.prevLoad ? `Prev: ${formatWeight(ex.prevLoad.weight, workoutStore.weightUnit)}${workoutStore.weightUnit} x ${ex.prevLoad.reps}` : 'Exercise History'"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <polyline points="12 6 12 12 16 14"></polyline>
                 </svg>
@@ -413,7 +420,7 @@ async function saveWorkout() {
                 @click="addSet(exIndex)" 
                 title="Add Set"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
@@ -421,14 +428,6 @@ async function saveWorkout() {
             </div>
           </div>
           
-          <div class="sets-header" v-if="ex.sets.length > 0">
-            <div class="set-col num-col">Set</div>
-            <div class="set-col">{{ workoutStore.weightUnit }}</div>
-            <div class="set-col">Reps</div>
-            <div class="set-col rpe-col">RPE</div>
-            <div class="set-col action-col text-right">Actions</div>
-          </div>
-
           <TransitionGroup name="list-fade" tag="div" class="sets-list-container">
             <div v-for="(s, setIndex) in ex.sets" :key="s.localId" class="set-row" :class="{ 'is-completed': s.completed, 'is-warmup': s.set_type === 'warmup' }">
               <button
@@ -446,7 +445,7 @@ async function saveWorkout() {
                   type="number"
                   class="input-large set-input"
                   v-model="s.weight"
-                  :placeholder="weightPlaceholder(ex, setIndex)"
+                  :placeholder="workoutStore.weightUnit"
                   :aria-label="`Set ${setIndex + 1} weight (${workoutStore.weightUnit})`"
                   min="0"
                   :disabled="s.completed"
@@ -457,7 +456,7 @@ async function saveWorkout() {
                   type="number"
                   class="input-large set-input"
                   v-model="s.reps"
-                  :placeholder="repPlaceholder(ex, setIndex)"
+                  placeholder="Reps"
                   :aria-label="`Set ${setIndex + 1} reps`"
                   min="1"
                   :disabled="s.completed"
@@ -468,7 +467,7 @@ async function saveWorkout() {
                   type="number"
                   class="input-large set-input"
                   v-model="s.rpe"
-                  placeholder="–"
+                  placeholder="RPE"
                   :aria-label="`Set ${setIndex + 1} RPE (optional, 1-10)`"
                   min="1"
                   max="10"
@@ -529,10 +528,6 @@ async function saveWorkout() {
         <!-- Actions -->
         <div class="builder-actions" style="margin-top: 24px;">
           <button class="builder-delete-btn" @click="showLeaveModal = true" :disabled="!hasChanges || isSaving">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
             Discard
           </button>
 
@@ -540,11 +535,6 @@ async function saveWorkout() {
 
           <button class="builder-save-btn" @click="saveWorkout" :disabled="!hasChanges || isSaving" :class="{ 'builder-save-btn--active': hasChanges }">
             <div v-if="isSaving" class="spinner button-spinner"></div>
-            <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
             {{ isSaving ? 'Saving...' : (hasChanges ? 'Save Workout' : 'Saved') }}
           </button>
         </div>
@@ -558,9 +548,20 @@ async function saveWorkout() {
       </div>
     </Transition>
 
+    <!-- Post-save Confirmation Modal -->
+    <AppModal
+      :show="showSavedModal"
+      :title="savedOffline ? 'Saved Offline' : 'Workout Saved'"
+      :message="savedOffline ? 'Saved offline — it\'ll sync automatically when you\'re back online.' : 'Workout saved successfully.'"
+      confirm-text="Go Home"
+      hide-cancel
+      @confirm="goHome"
+      @update:show="(v) => { if (!v) goHome() }"
+    />
+
     <!-- Unsaved Changes Modal -->
-    <AppModal 
-      v-model:show="showLeaveModal" 
+    <AppModal
+      v-model:show="showLeaveModal"
       title="Unsaved Workout" 
       message="You have an active workout session in progress. Leaving this page will discard your logged sets for this session. Are you sure you want to leave?" 
       confirm-text="Leave" 
@@ -624,10 +625,6 @@ async function saveWorkout() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.rpe-col {
-  max-width: 72px;
 }
 
 .rx-target-hint {

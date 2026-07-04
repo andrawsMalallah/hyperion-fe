@@ -181,6 +181,23 @@ function rxSummary(day, exId) {
   return parts.join(' · ')
 }
 
+// Structured version of the prescription, one value per target chip.
+function rxChips(day, exId) {
+  const rx = day.prescriptions?.[exId] || {}
+  let reps = ''
+  if (rx.rep_range_min && rx.rep_range_max) reps = `${rx.rep_range_min}–${rx.rep_range_max}`
+  else if (rx.rep_range_min) reps = `${rx.rep_range_min}+`
+  let setsReps = ''
+  if (rx.target_sets && reps) setsReps = `${rx.target_sets} × ${reps}`
+  else if (rx.target_sets) setsReps = `${rx.target_sets} sets`
+  else if (reps) setsReps = `${reps} reps`
+  return {
+    setsReps,
+    rpe: rx.target_rpe || '',
+    rest: rx.rest_seconds ? `${rx.rest_seconds}s` : ''
+  }
+}
+
 // Dialog States
 const showAddDayModal = ref(false)
 const showSaveSuccessModal = ref(false)
@@ -320,32 +337,9 @@ const getMuscleGroupColor = muscleGroupColor
       </div>
 
       <div class="builder-content-wrapper" v-else-if="targetProgram" key="content">
-        <div class="header-row" style="flex-wrap: wrap; gap: 12px;">
-          <input
-            class="program-name-input"
-            v-model="draftProgramName"
-            @input="isDirty = true"
-            placeholder="Program Name"
-            aria-label="Program name"
-          />
-          <button
-            class="visibility-toggle"
-            :class="{ 'visibility-toggle--public': draftIsPublic }"
-            :aria-pressed="draftIsPublic"
-            @click="draftIsPublic = !draftIsPublic; isDirty = true"
-            :title="draftIsPublic ? 'Anyone can find this program in Discover' : 'Only you can see this program'"
-          >
-            <svg v-if="draftIsPublic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-            {{ draftIsPublic ? 'Public in Discover' : 'Private' }}
-          </button>
+        <div class="header-row">
+          <input class="program-name-input" v-model="draftProgramName" @input="isDirty = true"
+            placeholder="Program Name" aria-label="Program name" />
         </div>
 
         <div class="builder-container">
@@ -355,22 +349,17 @@ const getMuscleGroupColor = muscleGroupColor
               <div class="day-header">
                 <h2 class="subtitle m-0">{{ day.day_name }}</h2>
                 <div class="day-actions gap-8">
-                  <button 
-                    class="btn-secondary day-action-btn" 
-                    @click="openModal(day.id)" 
-                    title="Add Exercise"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <button class="btn-secondary day-action-btn" @click="openModal(day.id)" title="Add Exercise">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
                       <line x1="12" y1="5" x2="12" y2="19"></line>
                       <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                   </button>
-                  <button 
-                    class="btn-secondary day-action-btn delete-day-btn" 
-                    @click="deleteDay(day.id)" 
-                    title="Delete Day"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <button class="btn-secondary day-action-btn delete-day-btn" @click="deleteDay(day.id)"
+                    title="Delete Day">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
@@ -379,84 +368,119 @@ const getMuscleGroupColor = muscleGroupColor
               </div>
 
               <TransitionGroup name="list-fade" tag="div" class="day-list">
-                <div v-for="(element, index) in day.exerciseObjects" :key="element.id + '-' + index"
-                  class="exercise-item list-item">
-                  <div class="order-controls">
-                    <button 
-                      class="icon-btn" 
-                      :disabled="index === 0" 
-                      @click="moveUp(day, index)"
-                      title="Move Up"
-                    >
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="18 15 12 9 6 15"></polyline>
-                      </svg>
-                    </button>
-                    <button 
-                      class="icon-btn" 
-                      :disabled="index === day.exerciseObjects.length - 1"
-                      @click="moveDown(day, index)"
-                      title="Move Down"
-                    >
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="ex-name">
-                    {{ element.name }}
-                    <span v-if="rxSummary(day, element.id)" class="rx-summary">{{ rxSummary(day, element.id) }}</span>
-                  </div>
-                  <div class="ex-badge" :style="{ backgroundColor: getMuscleGroupColor(element.target_muscle_group) }">
-                    {{ element.target_muscle_group }}
-                  </div>
-                  <button
-                    class="btn-secondary tap-target rx-toggle-btn"
-                    :class="{ 'rx-toggle-btn--active': expandedRx.has(rxKey(day.id, element.id)) }"
-                    @click="toggleRx(day, element.id)"
-                    title="Set targets (sets / reps / rest)"
-                    aria-label="Edit prescription"
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
-                      <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
-                      <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
-                      <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line>
-                      <line x1="17" y1="16" x2="23" y2="16"></line>
-                    </svg>
-                  </button>
-                  <button
-                    class="btn-danger tap-target remove-btn"
-                    @click="removeExercise(day, element)"
-                    title="Remove Exercise"
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                  </button>
+                <div v-for="(element, index) in day.exerciseObjects" :key="element.id"
+                  class="ex-card"
+                  :class="{ 'ex-card--editing': expandedRx.has(rxKey(day.id, element.id)) }"
+                  :style="{ '--muscle': getMuscleGroupColor(element.target_muscle_group) }">
 
-                  <div v-if="expandedRx.has(rxKey(day.id, element.id)) && day.prescriptions?.[element.id]" class="rx-editor">
-                    <label class="rx-field">
-                      <span>Sets</span>
-                      <input type="number" min="1" max="20" v-model.number="day.prescriptions[element.id].target_sets" @input="isDirty = true" placeholder="3" />
-                    </label>
-                    <label class="rx-field">
-                      <span>Reps min</span>
-                      <input type="number" min="1" max="100" v-model.number="day.prescriptions[element.id].rep_range_min" @input="isDirty = true" placeholder="8" />
-                    </label>
-                    <label class="rx-field">
-                      <span>Reps max</span>
-                      <input type="number" min="1" max="100" v-model.number="day.prescriptions[element.id].rep_range_max" @input="isDirty = true" placeholder="12" />
-                    </label>
-                    <label class="rx-field">
-                      <span>RPE</span>
-                      <input type="number" min="1" max="10" v-model.number="day.prescriptions[element.id].target_rpe" @input="isDirty = true" placeholder="–" />
-                    </label>
-                    <label class="rx-field">
-                      <span>Rest (s)</span>
-                      <input type="number" min="0" max="600" step="15" v-model.number="day.prescriptions[element.id].rest_seconds" @input="isDirty = true" placeholder="90" />
-                    </label>
+                  <!-- Header: index · name + muscle · reorder + actions -->
+                  <div class="ex-card-head">
+                    <span class="ex-index">{{ index + 1 }}</span>
+
+                    <div class="ex-title">
+                      <span class="ex-card-name">{{ element.name }}</span>
+                      <span class="ex-muscle" v-if="element.target_muscle_group">
+                        {{ element.target_muscle_group }}
+                      </span>
+                    </div>
+
+                    <div class="ex-reorder">
+                      <button class="ex-move" :disabled="index === 0" @click="moveUp(day, index)" title="Move Up"
+                        aria-label="Move up">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                      </button>
+                      <button class="ex-move" :disabled="index === day.exerciseObjects.length - 1"
+                        @click="moveDown(day, index)" title="Move Down" aria-label="Move down">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <button class="ex-remove" @click="removeExercise(day, element)" title="Remove Exercise"
+                      aria-label="Remove exercise">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- Targets strip: chips when set, or an "add targets" prompt -->
+                  <div class="ex-targets">
+                    <template v-if="rxSummary(day, element.id)">
+                      <span class="target-chip" v-if="rxChips(day, element.id).setsReps">
+                        <span class="chip-val">{{ rxChips(day, element.id).setsReps }}</span>
+                        <span class="chip-key">sets × reps</span>
+                      </span>
+                      <span class="target-chip" v-if="rxChips(day, element.id).rpe">
+                        <span class="chip-val">@{{ rxChips(day, element.id).rpe }}</span>
+                        <span class="chip-key">RPE</span>
+                      </span>
+                      <span class="target-chip" v-if="rxChips(day, element.id).rest">
+                        <span class="chip-val">{{ rxChips(day, element.id).rest }}</span>
+                        <span class="chip-key">rest</span>
+                      </span>
+                      <button class="target-edit" @click="toggleRx(day, element.id)"
+                        :class="{ 'target-edit--active': expandedRx.has(rxKey(day.id, element.id)) }"
+                        :aria-expanded="expandedRx.has(rxKey(day.id, element.id))">
+                        {{ expandedRx.has(rxKey(day.id, element.id)) ? 'Done' : 'Edit targets' }}
+                      </button>
+                    </template>
+                    <button v-else class="target-add" @click="toggleRx(day, element.id)"
+                      :aria-expanded="expandedRx.has(rxKey(day.id, element.id))">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                        stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      Set targets
+                    </button>
+                  </div>
+
+                  <!-- Editor — always mounted; height animates via grid-rows
+                       so it opens AND closes smoothly with no re-render pop. -->
+                  <div class="rx-collapse"
+                    :class="{ 'rx-collapse--open': expandedRx.has(rxKey(day.id, element.id)) }">
+                    <div class="rx-collapse-inner">
+                      <div class="rx-editor" v-if="day.prescriptions?.[element.id]">
+                        <label class="rx-field">
+                          <span>Sets</span>
+                          <input type="number" min="1" max="20"
+                            v-model.number="day.prescriptions[element.id].target_sets" @input="isDirty = true"
+                            placeholder="3" />
+                        </label>
+                        <label class="rx-field">
+                          <span>Reps min</span>
+                          <input type="number" min="1" max="100"
+                            v-model.number="day.prescriptions[element.id].rep_range_min" @input="isDirty = true"
+                            placeholder="8" />
+                        </label>
+                        <label class="rx-field">
+                          <span>Reps max</span>
+                          <input type="number" min="1" max="100"
+                            v-model.number="day.prescriptions[element.id].rep_range_max" @input="isDirty = true"
+                            placeholder="12" />
+                        </label>
+                        <label class="rx-field">
+                          <span>RPE</span>
+                          <input type="number" min="1" max="10"
+                            v-model.number="day.prescriptions[element.id].target_rpe" @input="isDirty = true"
+                            placeholder="–" />
+                        </label>
+                        <label class="rx-field">
+                          <span>Rest (s)</span>
+                          <input type="number" min="0" max="600" step="15"
+                            v-model.number="day.prescriptions[element.id].rest_seconds" @input="isDirty = true"
+                            placeholder="90" />
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -468,43 +492,40 @@ const getMuscleGroupColor = muscleGroupColor
 
           </TransitionGroup>
 
-          <!-- Error Alert -->
-          <div v-if="errorList.length > 0" class="error-msg" style="margin-top: 16px; margin-bottom: -8px;">
+          <!-- Error Alert — spacing comes from the builder-container flex gap
+               so it sits an even 24px from the days above and the actions below -->
+          <div v-if="errorList.length > 0" class="error-msg">
             <ul style="margin: 0; padding-left: 20px;">
               <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
             </ul>
           </div>
 
-          <!-- Builder Actions — all three buttons together -->
-          <div class="builder-actions" style="margin-top: -12px;">
-            <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting || isSaving" :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
-              <div v-if="isDeleting" class="spinner button-spinner"></div>
-              <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              {{ isDeleting ? (route.params.programId === 'new' ? 'Discarding...' : 'Deleting...') : (route.params.programId === 'new' ? 'Discard' : 'Delete') }}
-            </button>
+          <!-- Builder footer: visibility toggle lives in the action bar -->
+          <div class="builder-footer">
+            <div class="builder-actions">
+              <button class="builder-visibility-btn" :class="{ 'builder-visibility-btn--public': draftIsPublic }"
+                :aria-pressed="draftIsPublic" @click="draftIsPublic = !draftIsPublic; isDirty = true"
+                :title="draftIsPublic ? 'Anyone can find this program in Discover' : 'Only you can see this program'">
+                {{ draftIsPublic ? 'Public' : 'Private' }}
+              </button>
 
-            <div class="builder-actions-divider"></div>
+              <button class="builder-add-day-btn" @click="promptAddDay">
+                Add Day
+              </button>
 
-            <button class="builder-add-day-btn" @click="promptAddDay">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              Add Day
-            </button>
+              <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting || isSaving"
+                :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
+                <div v-if="isDeleting" class="spinner button-spinner"></div>
+                {{ isDeleting ? (route.params.programId === 'new' ? 'Discarding...' : 'Deleting...') :
+                  (route.params.programId === 'new' ? 'Discard' : 'Delete') }}
+              </button>
 
-            <button class="builder-save-btn" @click="saveProgram" :disabled="!isDirty || isSaving" :class="{ 'builder-save-btn--active': isDirty }">
-              <div v-if="isSaving" class="spinner button-spinner"></div>
-              <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
-              </svg>
-              {{ isSaving ? 'Saving...' : (isDirty ? 'Save' : 'Saved') }}
-            </button>
+              <button class="builder-save-btn" @click="saveProgram" :disabled="!isDirty || isSaving"
+                :class="{ 'builder-save-btn--active': isDirty }">
+                <div v-if="isSaving" class="spinner button-spinner"></div>
+                {{ isSaving ? 'Saving...' : (isDirty ? 'Save' : 'Saved') }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -519,135 +540,324 @@ const getMuscleGroupColor = muscleGroupColor
     </Transition>
 
     <!-- Modals -->
-    <ExerciseSelectionModal 
-      v-model:show="showExerciseModal" 
-      :dayId="selectedDayForModal" 
-      @add="handleAddExercises" 
-    />
+    <ExerciseSelectionModal v-model:show="showExerciseModal" :dayId="selectedDayForModal" @add="handleAddExercises" />
 
-    <AppModal 
-      v-model:show="showLeaveModal" 
-      title="Unsaved Changes" 
-      message="You have unsaved changes. Are you sure you want to leave?" 
-      type="confirm" 
-      confirm-text="Leave" 
-      cancel-text="Stay"
-      @confirm="handleLeaveConfirm" 
-      @cancel="handleLeaveCancel"
-    />
+    <AppModal v-model:show="showLeaveModal" title="Unsaved Changes"
+      message="You have unsaved changes. Are you sure you want to leave?" type="confirm" confirm-text="Leave"
+      cancel-text="Stay" @confirm="handleLeaveConfirm" @cancel="handleLeaveCancel" />
 
-    <AppModal 
-      v-model:show="showAddDayModal" 
-      title="Add New Day" 
-      message="Enter a name for the new day:" 
-      type="prompt" 
-      :default-value="defaultAddDayName" 
-      confirm-text="Add" 
-      @confirm="handleAddDayConfirm" 
-    />
+    <AppModal v-model:show="showAddDayModal" title="Add New Day" message="Enter a name for the new day:" type="prompt"
+      :default-value="defaultAddDayName" confirm-text="Add" @confirm="handleAddDayConfirm" />
 
-    <AppModal 
-      v-model:show="showDeleteDayModal" 
-      title="Delete Day" 
-      message="Are you sure you want to delete this day? This action cannot be undone." 
-      type="confirm" 
-      confirm-text="Delete" 
-      @confirm="handleDeleteDayConfirm" 
-    />
+    <AppModal v-model:show="showDeleteDayModal" title="Delete Day"
+      message="Are you sure you want to delete this day? This action cannot be undone." type="confirm"
+      confirm-text="Delete" @confirm="handleDeleteDayConfirm" />
 
-    <AppModal 
-      v-model:show="showDeleteProgramModal" 
-      :title="deleteProgramModalTitle" 
-      :message="deleteProgramModalMessage" 
-      type="confirm" 
-      :confirm-text="deleteProgramConfirmText" 
-      @confirm="handleDeleteProgramConfirm" 
-    />
+    <AppModal v-model:show="showDeleteProgramModal" :title="deleteProgramModalTitle"
+      :message="deleteProgramModalMessage" type="confirm" :confirm-text="deleteProgramConfirmText"
+      @confirm="handleDeleteProgramConfirm" />
 
-    <AppModal 
-      v-model:show="showSaveSuccessModal" 
-      title="Program Saved" 
-      message="Your program changes have been saved successfully. Would you like to stay or return home?" 
-      type="confirm" 
-      confirm-text="Go Home" 
-      cancel-text="Stay"
-      @confirm="handleGoHome" 
-    />
+    <AppModal v-model:show="showSaveSuccessModal" title="Program Saved"
+      message="Your program changes have been saved successfully. Would you like to stay or return home?" type="confirm"
+      confirm-text="Go Home" cancel-text="Stay" @confirm="handleGoHome" />
 
   </div>
 </template>
 
 <style scoped>
-.exercise-item {
-  flex-wrap: wrap;
+.builder-footer {
+  display: flex;
+  flex-direction: column;
 }
 
-.visibility-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 10px;
+/* ===== Exercise card =====================================================
+   Each exercise is a self-contained card carrying a left rail tinted with its
+   muscle-group color (--muscle, set inline). Three stacked zones: header,
+   targets strip, and the expandable editor. Reflows cleanly from phone to
+   desktop because everything is intrinsic width + wrap, no fixed columns. */
+.ex-card {
+  --muscle: var(--border-color);
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 60%),
+    var(--bg-surface);
   border: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.03);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  padding: 14px 16px 14px 18px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.visibility-toggle--public {
-  color: var(--primary-accent);
-  border-color: rgba(204, 255, 0, 0.4);
-  background-color: rgba(204, 255, 0, 0.04);
+/* Reorder (FLIP): the TransitionGroup adds .list-fade-move and sets the
+   transform; give these cards a matching, dedicated move transition and
+   promote them to their own layer so the slide is one smooth motion instead
+   of stepping. Overriding here keeps it from inheriting the generic timing. */
+.day-list :deep(.list-fade-move) {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
-.rx-summary {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--primary-accent);
-  margin-top: 2px;
+/* A card leaving the list must not collapse the layout instantly, or the
+   remaining cards jump before they animate. */
+.day-list :deep(.list-fade-leave-active) {
+  position: absolute;
+  width: calc(100% - 16px);
 }
 
-.rx-toggle-btn {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border-radius: 8px;
+/* Muscle-group rail */
+.ex-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--muscle);
+}
+
+.ex-card:hover {
+  border-color: #444;
+}
+
+.ex-card--editing {
+  border-color: rgba(204, 255, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(204, 255, 0, 0.08);
+}
+
+/* ---- Header row: index · title/muscle · reorder · remove ---- */
+.ex-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ex-index {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
-.rx-toggle-btn--active {
+.ex-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ex-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+.ex-muscle {
+  align-self: flex-start;
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muscle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-reorder {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.ex-move {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ex-move:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.ex-remove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+@media (hover: hover) {
+  .ex-move:not(:disabled):hover {
+    color: var(--text-primary);
+    border-color: #555;
+    background: var(--bg-surface-hover);
+  }
+  .ex-remove:hover {
+    color: var(--danger);
+    border-color: rgba(255, 77, 77, 0.4);
+    background: rgba(255, 77, 77, 0.08);
+  }
+}
+
+/* ---- Targets strip ---- */
+.ex-targets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.target-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--border-color);
+}
+
+.chip-val {
+  font-size: 13px;
+  font-weight: 800;
   color: var(--primary-accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chip-key {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+/* Edit / add-targets pills */
+.target-edit,
+.target-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.target-edit {
+  margin-left: auto;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.target-edit--active {
   border-color: var(--primary-accent);
+  color: var(--primary-accent);
+}
+
+.target-add {
+  border: 1px dashed rgba(204, 255, 0, 0.4);
+  background: rgba(204, 255, 0, 0.03);
+  color: var(--primary-accent);
+}
+
+@media (hover: hover) {
+  .target-edit:hover {
+    color: var(--text-primary);
+    border-color: #555;
+  }
+  .target-add:hover {
+    background: rgba(204, 255, 0, 0.08);
+  }
+}
+
+/* ---- Editor: labeled numeric grid, 5→3→2 columns ---- */
+/* Collapsible wrapper: grid-rows 0fr → 1fr animates height with no JS and no
+   unmount, so open and close are both smooth and nothing re-renders mid-edit. */
+.rx-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.28s cubic-bezier(0.25, 0.8, 0.25, 1),
+    opacity 0.2s ease;
+}
+
+.rx-collapse--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.rx-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
 }
 
 .rx-editor {
-  flex-basis: 100%;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
-  margin-top: 10px;
-  padding: 12px;
-  background-color: rgba(0, 0, 0, 0.2);
+  margin-top: 12px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.22);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 10px;
+}
+
+@media (max-width: 620px) {
+  .rx-editor {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 380px) {
+  .rx-editor {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .rx-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  flex: 1 1 70px;
-  min-width: 64px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .rx-field span {
@@ -663,14 +873,22 @@ const getMuscleGroupColor = muscleGroupColor
   background-color: var(--bg-main);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: 7px;
+  padding: 9px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .rx-field input:focus {
   outline: none;
   border-color: var(--primary-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-collapse {
+    transition: none;
+  }
 }
 </style>
