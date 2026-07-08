@@ -19,12 +19,6 @@
           <PasswordInput id="password_confirmation" v-model="password_confirmation" required minlength="8" autocomplete="new-password" />
         </div>
         
-        <div v-if="errorList.length > 0" class="error-msg">
-          <ul style="margin: 0; padding-left: 20px;">
-            <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
-          </ul>
-        </div>
-
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
           <span v-if="loading">Resetting...</span>
           <span v-else>Reset Password</span>
@@ -35,37 +29,25 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import api from '@/api';
+import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
 const router = useRouter();
 const route = useRoute();
+const toast = useToastStore();
 
 const email = ref(route.query.email || '');
 const password = ref('');
 const password_confirmation = ref('');
-const errorMsg = ref('');
-const validationErrors = ref({});
 const loading = ref(false);
 
-const errorList = computed(() => {
-  if (Object.keys(validationErrors.value).length > 0) {
-    return Object.values(validationErrors.value).flat();
-  }
-  if (errorMsg.value) {
-    return [errorMsg.value];
-  }
-  return [];
-});
-
 const handleResetPassword = async () => {
-  errorMsg.value = '';
-  validationErrors.value = {};
   loading.value = true;
-  
+
   try {
     await api.post('/reset-password', {
       token: route.params.token,
@@ -73,15 +55,10 @@ const handleResetPassword = async () => {
       password: password.value,
       password_confirmation: password_confirmation.value
     });
+    toast.success('Password reset — log in with your new password.');
     router.push('/login');
-  } catch (error) {
-    if (error.response && error.response.status === 422) {
-      validationErrors.value = error.response.data.errors || {};
-    } else if (error.response && error.response.data && error.response.data.message) {
-      errorMsg.value = error.response.data.message;
-    } else {
-      errorMsg.value = 'Failed to reset password.';
-    }
+  } catch {
+    // Invalid token / validation errors are surfaced as toasts by the interceptor.
   } finally {
     loading.value = false;
   }
@@ -104,14 +81,5 @@ const handleResetPassword = async () => {
 
 .text-center {
   text-align: center;
-}
-
-.error-msg {
-  background-color: rgba(255, 77, 77, 0.1);
-  color: var(--danger);
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  border: 1px solid rgba(255, 77, 77, 0.2);
 }
 </style>

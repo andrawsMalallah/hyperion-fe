@@ -24,6 +24,11 @@ const toggleDropdown = () => {
   showDropdown.value = !showDropdown.value
 }
 
+const goToProfile = () => {
+  showDropdown.value = false
+  router.push('/profile')
+}
+
 const goToSettings = () => {
   showDropdown.value = false
   router.push('/settings')
@@ -107,11 +112,14 @@ watch(isAuthenticated, (newVal) => {
         </button>
         <Transition name="dropdown-fade">
           <div v-if="showDropdown" class="user-dropdown">
-            <div class="dropdown-user-header">
-              <span class="user-email">{{ user?.email || 'Account Info' }}</span>
-            </div>
-            <div class="dropdown-divider"></div>
-            
+            <button class="dropdown-item" @click="goToProfile">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Profile
+            </button>
+
             <button class="dropdown-item" @click="goToSettings">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -212,22 +220,6 @@ watch(isAuthenticated, (newVal) => {
   padding: 8px 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   z-index: 1000;
-}
-
-.dropdown-user-header {
-  padding: 4px 10px 8px 10px;
-  display: flex;
-  flex-direction: column;
-}
-
-.user-email {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .dropdown-divider {

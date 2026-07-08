@@ -31,7 +31,8 @@ export const useHistoryStore = defineStore('history', () => {
     try {
       const page = replace ? 1 : historyPage.value
       const response = await api.get('/workout-logs', {
-        params: { page }
+        params: { page },
+        suppressErrorToast: true
       })
 
       const newLogs = response.data.data

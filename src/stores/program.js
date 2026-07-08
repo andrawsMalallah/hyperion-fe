@@ -86,7 +86,7 @@ export const useProgramStore = defineStore('program', () => {
     if (!force && isListLoaded.value && Date.now() - lastLoadedAt < STALE_AFTER_MS) return
     loading.value = true
     try {
-      const response = await api.get('/programs')
+      const response = await api.get('/programs', { suppressErrorToast: true })
       const programsData = response.data.data
 
       user_programs.value = programsData.map(s => ({
@@ -172,7 +172,7 @@ export const useProgramStore = defineStore('program', () => {
     
     loading.value = true
     try {
-      const response = await api.get(`/programs/by-day/${dayId}`)
+      const response = await api.get(`/programs/by-day/${dayId}`, { suppressErrorToast: true })
       const s = response.data.data
       
       const idx = user_programs.value.findIndex(item => String(item.id) === String(s.id))
@@ -220,7 +220,7 @@ export const useProgramStore = defineStore('program', () => {
     })
 
     try {
-      await api.put(`/programs/${programId}`, { is_active: true })
+      await api.put(`/programs/${programId}`, { is_active: true }, { suppressErrorToast: true })
     } catch (e) {
       console.error("Failed to set active Program on server, rolling back:", e)
       user_programs.value = originalprograms
@@ -314,7 +314,7 @@ export const useProgramStore = defineStore('program', () => {
 
   async function deleteProgram(programId) {
     try {
-      await api.delete(`/programs/${programId}`)
+      await api.delete(`/programs/${programId}`, { suppressErrorToast: true })
       
       user_programs.value = user_programs.value.filter(s => String(s.id) !== String(programId))
       program_days.value = program_days.value.filter(d => String(d.program_id) !== String(programId))

@@ -396,19 +396,23 @@ const showTable = ref(false)
         <button class="table-toggle" @click="showTable = !showTable" :aria-expanded="showTable">
           {{ showTable ? 'Hide' : 'Show' }} data table
         </button>
-        <table v-if="showTable" class="data-table">
-          <caption class="visually-hidden">Best set per session for the selected exercise</caption>
-          <thead>
-            <tr><th>Date</th><th>Best set</th><th>Est. 1RM ({{ unit }})</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in [...trendPoints].reverse()" :key="p.date.getTime()">
-              <td>{{ p.date.toLocaleDateString() }}</td>
-              <td>{{ formatWeight(p.weight, unit) }}{{ unit }} × {{ p.reps }}</td>
-              <td>{{ formatWeight(p.e1rm, unit) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-collapse" :class="{ 'table-collapse--open': showTable }">
+          <div class="table-collapse-inner">
+            <table class="data-table">
+              <caption class="visually-hidden">Best set per session for the selected exercise</caption>
+              <thead>
+                <tr><th>Date</th><th>Best set</th><th>Est. 1RM ({{ unit }})</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in [...trendPoints].reverse()" :key="p.date.getTime()">
+                  <td>{{ p.date.toLocaleDateString() }}</td>
+                  <td>{{ formatWeight(p.weight, unit) }}{{ unit }} × {{ p.reps }}</td>
+                  <td>{{ formatWeight(p.e1rm, unit) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </template>
   </div>
@@ -729,6 +733,31 @@ const showTable = ref(false)
 .table-toggle:hover {
   color: var(--text-primary);
   border-color: var(--primary-accent);
+}
+
+/* Smooth expand/collapse — the table stays mounted and its height animates
+   via the grid-rows 0fr→1fr technique (no JS, reversible both ways). */
+.table-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.28s ease, opacity 0.28s ease;
+}
+
+.table-collapse--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.table-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-collapse {
+    transition: none;
+  }
 }
 
 .data-table {

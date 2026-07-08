@@ -18,12 +18,6 @@
           <router-link to="/forgot-password" style="color: var(--text-secondary); text-decoration: none; font-size: 12px;">Forgot Password?</router-link>
         </div>
         
-        <div v-if="errorList.length > 0" class="error-msg">
-          <ul style="margin: 0; padding-left: 20px;">
-            <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
-          </ul>
-        </div>
-
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
           <span v-if="loading">Signing in...</span>
           <span v-else>Sign In</span>
@@ -39,7 +33,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import PrimaryButton from '@/components/PrimaryButton.vue';
@@ -47,38 +41,19 @@ import PasswordInput from '@/components/PasswordInput.vue';
 
 const email = ref('');
 const password = ref('');
-const errorMsg = ref('');
-const validationErrors = ref({});
 const loading = ref(false);
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const errorList = computed(() => {
-  if (Object.keys(validationErrors.value).length > 0) {
-    return Object.values(validationErrors.value).flat();
-  }
-  if (errorMsg.value) {
-    return [errorMsg.value];
-  }
-  return [];
-});
-
 const handleLogin = async () => {
-  errorMsg.value = '';
-  validationErrors.value = {};
   loading.value = true;
   try {
     await authStore.login({ email: email.value, password: password.value });
     router.push('/');
-  } catch (error) {
-    if (error.response && error.response.status === 422) {
-      validationErrors.value = error.response.data.errors || {};
-    } else if (error.response && error.response.data && error.response.data.message) {
-      errorMsg.value = error.response.data.message;
-    } else {
-      errorMsg.value = 'Failed to login. Please try again.';
-    }
+  } catch {
+    // Invalid credentials / validation errors are surfaced as toasts by the
+    // axios interceptor.
   } finally {
     loading.value = false;
   }
@@ -101,14 +76,5 @@ const handleLogin = async () => {
 
 .text-center {
   text-align: center;
-}
-
-.error-msg {
-  background-color: rgba(255, 77, 77, 0.1);
-  color: var(--danger);
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  border: 1px solid rgba(255, 77, 77, 0.2);
 }
 </style>

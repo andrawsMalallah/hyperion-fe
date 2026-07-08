@@ -7,7 +7,6 @@ import { useSyncStore } from './sync'
 import { useProgramStore } from './program'
 import { useExerciseStore } from './exercise'
 import { detectPRs } from '../utils/stats'
-import { formatWeight } from '../utils/units'
 
 export const useWorkoutStore = defineStore('workout', () => {
   try {
@@ -59,9 +58,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeWorkoutSets.value = []
   }
 
-  // Resolves to 'online' when saved to the server, or 'offline' when queued
-  // locally for later sync. Throws only on a server-side rejection (e.g. 422),
-  // leaving the session intact. Returns null when there is nothing to save.
+  // Resolves to a summary object once saved (server) or queued (offline):
+  //   { status: 'online' | 'offline', prs, sets, volume, durationMs }
+  // `prs` are enriched with the exercise name for display. Throws only on a
+  // server-side rejection (e.g. 422), leaving the session intact. Returns null
+  // when there is nothing to save.
   async function finishWorkout() {
     if (!activeWorkoutDayId.value || activeWorkoutSets.value.length === 0) {
       cancelWorkout()
@@ -91,7 +92,17 @@ export const useWorkoutStore = defineStore('workout', () => {
     for (const [id, entry] of Object.entries(recentByExercise.value)) {
       bestByExercise[id] = entry?.best_e1rm || 0
     }
-    const prs = detectPRs(bestByExercise, payload.sets)
+    const prs = enrichPRs(detectPRs(bestByExercise, payload.sets))
+
+    // Session stats for the post-save summary (working sets are what the
+    // athlete "did"; warmups don't count toward the volume total).
+    const workingSets = payload.sets.filter(s => (s.set_type || 'working') !== 'warmup')
+    const summary = {
+      prs,
+      sets: workingSets.length,
+      volume: Math.round(workingSets.reduce((acc, s) => acc + s.weight * s.reps, 0)),
+      durationMs: Math.max(0, new Date(payload.ended_at) - new Date(payload.date_timestamp))
+    }
 
     try {
       const response = await api.post('/workout-logs', payload)
@@ -104,10 +115,9 @@ export const useWorkoutStore = defineStore('workout', () => {
       markDayPerformed(payload.program_day_id, payload.ended_at)
       clearActiveWorkout()
       stopRestTimer()
-      celebratePRs(prs)
       // Opportunistically drain anything queued from an earlier outage.
       useSyncStore().flush()
-      return 'online'
+      return { status: 'online', ...summary }
     } catch (e) {
       // No response at all means offline / network failure — not a rejection.
       // Queue the workout locally and treat it as saved; it will upload when
@@ -117,8 +127,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         markDayPerformed(payload.program_day_id, payload.ended_at)
         clearActiveWorkout()
         stopRestTimer()
-        celebratePRs(prs)
-        return 'offline'
+        return { status: 'offline', ...summary }
       }
       // The server responded with an error (e.g. validation). Keep the
       // session intact so the user can fix it, and surface the failure.
@@ -150,15 +159,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     })
   }
 
-  function celebratePRs(prs) {
-    const toast = useToastStore()
-    const exerciseName = id => {
-      const ex = useExerciseStore().exercises.find(e => e.id === id)
-      return ex ? ex.name : 'Exercise'
-    }
-    prs.slice(0, 3).forEach(pr => {
-      const w = formatWeight(pr.weight, weightUnit.value)
-      toast.success(`🎉 New PR — ${exerciseName(pr.exercise_id)}: ${w}${weightUnit.value} × ${pr.reps}`, 6000)
+  // Attach the exercise name to each PR so the summary modal can render it
+  // without another store lookup at display time.
+  function enrichPRs(prs) {
+    const exercises = useExerciseStore().exercises
+    return prs.map(pr => {
+      const ex = exercises.find(e => e.id === pr.exercise_id)
+      return { ...pr, exerciseName: ex ? ex.name : 'Exercise' }
     })
   }
 
@@ -370,7 +377,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     settingsDebounce = null
     const toast = useToastStore()
     try {
-      const response = await api.put('/user/settings', payload)
+      const response = await api.put('/user/settings', payload, { suppressErrorToast: true })
       applyServerSettings(response.data.data)
       toast.success('Settings saved')
     } catch (e) {

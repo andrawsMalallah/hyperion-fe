@@ -33,7 +33,8 @@ export const useDiscoverStore = defineStore('discover', () => {
         params: {
           page,
           search: searchQuery.value || undefined
-        }
+        },
+        suppressErrorToast: true
       })
 
       const newPrograms = response.data.data

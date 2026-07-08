@@ -6,6 +6,7 @@ import ProgramBuilder from '../views/ProgramBuilder.vue'
 import ActiveWorkout from '../views/ActiveWorkout.vue'
 import CreateProgram from '../views/CreateProgram.vue'
 import Settings from '../views/Settings.vue'
+import Profile from '../views/Profile.vue'
 import History from '../views/History.vue'
 import Progress from '../views/Progress.vue'
 import Discover from '../views/Discover.vue'
@@ -89,6 +90,12 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: Settings,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
     meta: { requiresAuth: true }
   },
   {

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useExerciseStore } from '../stores/exercise'
 import { useProgramStore } from '../stores/program'
+import { useToastStore } from '../stores/toast'
 import ExerciseSelectionModal from '../components/ExerciseSelectionModal.vue'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
@@ -12,6 +13,7 @@ const router = useRouter()
 const route = useRoute()
 const exerciseStore = useExerciseStore()
 const programStore = useProgramStore()
+const toast = useToastStore()
 
 const pageLoading = ref(true)
 
@@ -32,18 +34,6 @@ const draftIsPublic = ref(true)
 const isDirty = ref(false)
 const isSaving = ref(false)
 const isDeleting = ref(false)
-const errorMsg = ref('')
-const validationErrors = ref({})
-
-const errorList = computed(() => {
-  if (Object.keys(validationErrors.value).length > 0) {
-    return Object.values(validationErrors.value).flat()
-  }
-  if (errorMsg.value) {
-    return [errorMsg.value]
-  }
-  return []
-})
 
 const initializeDraft = () => {
   if (targetProgram.value) {
@@ -200,7 +190,6 @@ function rxChips(day, exId) {
 
 // Dialog States
 const showAddDayModal = ref(false)
-const showSaveSuccessModal = ref(false)
 const showDeleteDayModal = ref(false)
 const showDeleteProgramModal = ref(false)
 const dayToDelete = ref(null)
@@ -253,8 +242,6 @@ const handleDeleteDayConfirm = () => {
 const saveProgram = async () => {
   if (targetProgram.value) {
     isSaving.value = true
-    errorMsg.value = ''
-    validationErrors.value = {}
     try {
       if (route.params.programId === 'new') {
         const newId = await programStore.saveNewProgram({
@@ -273,23 +260,13 @@ const saveProgram = async () => {
         await programStore.syncProgramDays(targetProgram.value.id, draftDays.value)
       }
       isDirty.value = false
-      showSaveSuccessModal.value = true
-    } catch (error) {
-      if (error.response && error.response.status === 422) {
-        validationErrors.value = error.response.data.errors || {}
-      } else if (error.response && error.response.data && error.response.data.message) {
-        errorMsg.value = error.response.data.message
-      } else {
-        errorMsg.value = 'Failed to save program. Please try again.'
-      }
+      toast.success('Program saved')
+    } catch {
+      // Validation / server errors are surfaced as toasts by the interceptor.
     } finally {
       isSaving.value = false
     }
   }
-}
-
-const handleGoHome = () => {
-  router.push('/')
 }
 
 const deleteProgram = () => {
@@ -492,14 +469,6 @@ const getMuscleGroupColor = muscleGroupColor
 
           </TransitionGroup>
 
-          <!-- Error Alert — spacing comes from the builder-container flex gap
-               so it sits an even 24px from the days above and the actions below -->
-          <div v-if="errorList.length > 0" class="error-msg">
-            <ul style="margin: 0; padding-left: 20px;">
-              <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
-            </ul>
-          </div>
-
           <!-- Builder footer: visibility toggle lives in the action bar -->
           <div class="builder-footer">
             <div class="builder-actions">
@@ -556,10 +525,6 @@ const getMuscleGroupColor = muscleGroupColor
     <AppModal v-model:show="showDeleteProgramModal" :title="deleteProgramModalTitle"
       :message="deleteProgramModalMessage" type="confirm" :confirm-text="deleteProgramConfirmText"
       @confirm="handleDeleteProgramConfirm" />
-
-    <AppModal v-model:show="showSaveSuccessModal" title="Program Saved"
-      message="Your program changes have been saved successfully. Would you like to stay or return home?" type="confirm"
-      confirm-text="Go Home" cancel-text="Stay" @confirm="handleGoHome" />
 
   </div>
 </template>

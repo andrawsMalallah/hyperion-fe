@@ -24,12 +24,6 @@
           <PasswordInput id="password_confirmation" v-model="password_confirmation" required minlength="8" autocomplete="new-password" />
         </div>
         
-        <div v-if="errorList.length > 0" class="error-msg">
-          <ul style="margin: 0; padding-left: 20px;">
-            <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
-          </ul>
-        </div>
-
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
           <span v-if="loading">Signing up...</span>
           <span v-else>Sign Up</span>
@@ -45,9 +39,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
@@ -55,49 +50,30 @@ const name = ref('');
 const email = ref('');
 const password = ref('');
 const password_confirmation = ref('');
-const errorMsg = ref('');
-const validationErrors = ref({});
 const loading = ref(false);
 
 const router = useRouter();
 const authStore = useAuthStore();
-
-const errorList = computed(() => {
-  if (Object.keys(validationErrors.value).length > 0) {
-    return Object.values(validationErrors.value).flat();
-  }
-  if (errorMsg.value) {
-    return [errorMsg.value];
-  }
-  return [];
-});
+const toast = useToastStore();
 
 const handleRegister = async () => {
-  errorMsg.value = '';
-  validationErrors.value = {};
-  
+  // Client-side guard — the backend can't compare the two fields for us here.
   if (password.value !== password_confirmation.value) {
-    errorMsg.value = 'Passwords do not match';
+    toast.error('Passwords do not match.');
     return;
   }
 
   loading.value = true;
   try {
-    await authStore.register({ 
+    await authStore.register({
       name: name.value,
-      email: email.value, 
+      email: email.value,
       password: password.value,
       password_confirmation: password_confirmation.value
     });
     router.push('/');
-  } catch (error) {
-    if (error.response && error.response.status === 422) {
-      validationErrors.value = error.response.data.errors || {};
-    } else if (error.response && error.response.data && error.response.data.message) {
-      errorMsg.value = error.response.data.message;
-    } else {
-      errorMsg.value = 'Failed to register. Please try again.';
-    }
+  } catch {
+    // Backend errors are surfaced as toasts by the axios interceptor.
   } finally {
     loading.value = false;
   }
@@ -120,14 +96,5 @@ const handleRegister = async () => {
 
 .text-center {
   text-align: center;
-}
-
-.error-msg {
-  background-color: rgba(255, 77, 77, 0.1);
-  color: var(--danger);
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  border: 1px solid rgba(255, 77, 77, 0.2);
 }
 </style>

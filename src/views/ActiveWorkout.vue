@@ -4,6 +4,7 @@ import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useExerciseStore } from '../stores/exercise'
+import { useToastStore } from '../stores/toast'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { toKg, formatWeight } from '../utils/units'
@@ -17,6 +18,7 @@ const router = useRouter()
 const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const exerciseStore = useExerciseStore()
+const toast = useToastStore()
 
 // If dayId isn't found locally, it's fine, we try to match it.
 // To handle the API type (it could be an integer ID now from the API)
@@ -27,18 +29,6 @@ const day = computed(() => programStore.program_days.find(d => d.id === parsedDa
 const activeWorkoutSession = ref([])
 const pageLoading = ref(true)
 const isSaving = ref(false)
-const errorMsg = ref('')
-const validationErrors = ref({})
-
-const errorList = computed(() => {
-  if (Object.keys(validationErrors.value).length > 0) {
-    return Object.values(validationErrors.value).flat()
-  }
-  if (errorMsg.value) {
-    return [errorMsg.value]
-  }
-  return []
-})
 
 // Keep the screen awake mid-workout (phones lock fast in a gym).
 let wakeLock = null
@@ -267,18 +257,42 @@ const showLeaveModal = ref(false)
 const nextRoute = ref(null)
 const isLeaving = ref(false)
 
-// Post-save confirmation modal (Item 1)
+// Post-save summary modal — the workout is already saved (or queued offline)
+// by the time this shows; it doubles as the celebration/reward screen.
 const showSavedModal = ref(false)
 const savedOffline = ref(false)
+const savedSummary = ref(null)
+
+// Duration as "1h 12m" / "34m" / "45s".
+function formatDuration(ms) {
+  const totalSec = Math.round((ms || 0) / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m`
+  return `${s}s`
+}
+
+// Total volume in the user's unit, compactly (e.g. "12,340 kg").
+function formatVolume(volumeKg) {
+  const v = Math.round(Number(formatWeight(volumeKg, workoutStore.weightUnit)))
+  return `${v.toLocaleString()} ${workoutStore.weightUnit}`
+}
 
 // The workout is already saved by the time this modal shows, so any dismissal
 // (Go Home, Escape, or backdrop) routes home. Guarded against a double push.
+//
+// Close the modal first and let its 300ms leave transition play out, THEN
+// navigate. Routing immediately would unmount this view mid-animation and the
+// modal would flick out instead of fading; waiting for the transition gives a
+// clean, deliberate exit.
 let navigatingHome = false
 function goHome() {
   if (navigatingHome) return
   navigatingHome = true
   showSavedModal.value = false
-  router.push('/')
+  setTimeout(() => router.push('/'), 300) // matches .modal-fade leave duration
 }
 
 const hasCompletedSets = computed(() => {
@@ -323,9 +337,6 @@ function confirmLeave() {
 }
 
 async function saveWorkout() {
-  errorMsg.value = ''
-  validationErrors.value = {}
-
   // Auto-save any sets that are filled but not saved yet
   activeWorkoutSession.value.forEach((ex, exIndex) => {
     ex.sets.forEach((s, setIndex) => {
@@ -336,29 +347,26 @@ async function saveWorkout() {
   })
 
   if (!hasCompletedSets.value) {
-    errorMsg.value = 'Complete at least one set (weight and reps) before saving.'
+    toast.error('Complete at least one set (weight and reps) before saving.')
     return
   }
 
   try {
     isSaving.value = true
-    const outcome = await workoutStore.finishWorkout()
+    const result = await workoutStore.finishWorkout()
     // Session is saved (server) or safely queued (offline) — allow navigation
     // past the unsaved-changes guard and surface the result in a modal.
     isLeaving.value = true
     isSaving.value = false
-    savedOffline.value = outcome === 'offline'
+    savedOffline.value = result?.status === 'offline'
+    savedSummary.value = result
     showSavedModal.value = true
-  } catch (error) {
+  } catch {
+    // A server rejection (e.g. 422) is surfaced as a toast by the interceptor.
+    // Re-arm the unsaved-changes guard so the user can't silently lose the
+    // session by navigating away after a failed save.
     isSaving.value = false
     isLeaving.value = false
-    if (error.response && error.response.status === 422) {
-      validationErrors.value = error.response.data.errors || {}
-    } else if (error.response && error.response.data && error.response.data.message) {
-      errorMsg.value = error.response.data.message
-    } else {
-      errorMsg.value = 'Failed to save workout. Please try again.'
-    }
   }
 }
 </script>
@@ -373,7 +381,7 @@ async function saveWorkout() {
       <!-- Loading Skeleton State -->
       <div v-if="pageLoading" class="workout-skeleton" key="skeleton">
         <div class="skeleton-exercises">
-          <div v-for="n in 2" :key="n" class="skeleton-exercise-card card skeleton-pulse">
+          <div v-for="n in 3" :key="n" class="skeleton-exercise-card card skeleton-pulse">
             <div class="skeleton-exercise-header">
               <div class="skeleton-bar title-bar"></div>
               <div class="skeleton-bar right-bar"></div>
@@ -518,13 +526,6 @@ async function saveWorkout() {
 
         </div>
 
-        <!-- Error Alert -->
-        <div v-if="errorList.length > 0" class="error-msg" style="margin-top: 24px; margin-bottom: -8px;">
-          <ul style="margin: 0; padding-left: 20px;">
-            <li v-for="(err, index) in errorList" :key="index">{{ err }}</li>
-          </ul>
-        </div>
-
         <!-- Actions -->
         <div class="builder-actions" style="margin-top: 24px;">
           <button class="builder-delete-btn" @click="showLeaveModal = true" :disabled="!hasChanges || isSaving">
@@ -535,7 +536,7 @@ async function saveWorkout() {
 
           <button class="builder-save-btn" @click="saveWorkout" :disabled="!hasChanges || isSaving" :class="{ 'builder-save-btn--active': hasChanges }">
             <div v-if="isSaving" class="spinner button-spinner"></div>
-            {{ isSaving ? 'Saving...' : (hasChanges ? 'Save Workout' : 'Saved') }}
+            {{ isSaving ? 'Saving...' : 'Save' }}
           </button>
         </div>
       </div>
@@ -548,16 +549,46 @@ async function saveWorkout() {
       </div>
     </Transition>
 
-    <!-- Post-save Confirmation Modal -->
+    <!-- Post-save Summary Modal — doubles as the celebration/reward screen. -->
     <AppModal
       :show="showSavedModal"
-      :title="savedOffline ? 'Saved Offline' : 'Workout Saved'"
-      :message="savedOffline ? 'Saved offline — it\'ll sync automatically when you\'re back online.' : 'Workout saved successfully.'"
+      :title="savedOffline ? 'Saved Offline' : 'Workout Complete'"
       confirm-text="Go Home"
       hide-cancel
       @confirm="goHome"
       @update:show="(v) => { if (!v) goHome() }"
-    />
+    >
+      <div class="ws-summary" v-if="savedSummary">
+        <p v-if="savedOffline" class="ws-offline-note">
+          Saved offline — it'll sync automatically when you're back online.
+        </p>
+
+        <div class="ws-stats">
+          <div class="ws-stat">
+            <span class="ws-stat-value">{{ formatDuration(savedSummary.durationMs) }}</span>
+            <span class="ws-stat-label">Duration</span>
+          </div>
+          <div class="ws-stat">
+            <span class="ws-stat-value">{{ savedSummary.sets }}</span>
+            <span class="ws-stat-label">Sets</span>
+          </div>
+          <div class="ws-stat">
+            <span class="ws-stat-value">{{ formatVolume(savedSummary.volume) }}</span>
+            <span class="ws-stat-label">Volume</span>
+          </div>
+        </div>
+
+        <div v-if="savedSummary.prs && savedSummary.prs.length" class="ws-prs">
+          <div class="ws-prs-title">🎉 New personal records</div>
+          <ul class="ws-pr-list">
+            <li v-for="pr in savedSummary.prs" :key="pr.exercise_id" class="ws-pr-item">
+              <span class="ws-pr-name">{{ pr.exerciseName }}</span>
+              <span class="ws-pr-lift">{{ formatWeight(pr.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} × {{ pr.reps }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </AppModal>
 
     <!-- Unsaved Changes Modal -->
     <AppModal
@@ -657,5 +688,113 @@ async function saveWorkout() {
 
 .set-row.is-warmup .set-input {
   opacity: 0.85;
+}
+
+/* ---- Post-save workout summary ---- */
+.ws-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ws-offline-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.ws-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ws-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.ws-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary, #fff);
+  line-height: 1.1;
+}
+
+.ws-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.ws-prs {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+}
+
+.ws-prs-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary-accent);
+  margin-bottom: 12px;
+}
+
+.ws-pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-pr-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.ws-pr-name {
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-pr-lift {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary-accent);
+  white-space: nowrap;
+}
+
+@media (max-width: 340px) {
+  .ws-stat-value {
+    font-size: 16px;
+  }
+  .ws-stat {
+    padding: 12px 4px;
+  }
 }
 </style>

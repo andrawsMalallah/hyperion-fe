@@ -2,9 +2,11 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
+import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
 
 const router = useRouter()
+const toast = useToastStore()
 
 // Form state
 const exerciseName = ref('')
@@ -13,8 +15,6 @@ const mechanicsType = ref('Compound')
 
 // UI state
 const submitting = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
 const recentlyAdded = ref([])
 
 // Must match the seeded catalog taxonomy so filtering/grouping stays consistent.
@@ -31,8 +31,6 @@ async function submitExercise() {
   if (!isFormValid.value || submitting.value) return
 
   submitting.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
 
   try {
     const response = await api.post('/exercises', {
@@ -49,20 +47,12 @@ async function submitExercise() {
       mechanics_type: created.mechanics_type
     })
 
-    successMessage.value = `"${created.name}" submitted! You can use it right away; it will appear for everyone once approved.`
+    toast.success(`"${created.name}" submitted! You can use it right away; it will appear for everyone once approved.`)
     exerciseName.value = ''
     targetMuscleGroup.value = ''
     mechanicsType.value = 'Compound'
-
-    setTimeout(() => { successMessage.value = '' }, 4000)
-  } catch (e) {
-    if (e.response?.status === 422) {
-      const errors = e.response.data.errors
-      const first = Object.values(errors)[0]
-      errorMessage.value = Array.isArray(first) ? first[0] : first
-    } else {
-      errorMessage.value = 'Something went wrong. Please try again.'
-    }
+  } catch {
+    // Validation / server errors are surfaced as toasts by the interceptor.
   } finally {
     submitting.value = false
   }
@@ -159,26 +149,6 @@ async function submitExercise() {
           </button>
         </div>
       </div>
-
-      <!-- Feedback Messages -->
-      <Transition name="fade">
-        <div v-if="successMessage" class="feedback-msg success-msg">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          {{ successMessage }}
-        </div>
-      </Transition>
-      <Transition name="fade">
-        <div v-if="errorMessage" class="feedback-msg error-msg">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-          </svg>
-          {{ errorMessage }}
-        </div>
-      </Transition>
 
       <!-- Submit Button -->
       <PrimaryButton
@@ -372,30 +342,6 @@ async function submitExercise() {
 .toggle-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* Feedback Messages */
-.feedback-msg {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
-.success-msg {
-  background-color: rgba(0, 230, 118, 0.08);
-  border: 1px solid rgba(0, 230, 118, 0.25);
-  color: var(--success);
-}
-
-.error-msg {
-  background-color: rgba(255, 77, 77, 0.08);
-  border: 1px solid rgba(255, 77, 77, 0.25);
-  color: var(--danger);
 }
 
 /* Recently Added */

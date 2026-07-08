@@ -15,11 +15,11 @@ export const useToastStore = defineStore('toast', () => {
     return id
   }
 
-  function success(message, duration = 2500) {
+  function success(message, duration = 5000) {
     return push(message, 'success', duration)
   }
 
-  function error(message, duration = 4500) {
+  function error(message, duration = 5000) {
     return push(message, 'error', duration)
   }
 

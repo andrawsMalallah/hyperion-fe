@@ -1106,8 +1106,8 @@ body.modal-open {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -1684,8 +1684,8 @@ body.modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-surface);
@@ -1704,24 +1704,6 @@ body.modal-open {
 
 .icon-btn-header:active {
   transform: translateY(0);
-}
-
-.error-msg {
-  background-color: rgba(255, 77, 77, 0.1);
-  color: var(--danger);
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  border: 1px solid rgba(255, 77, 77, 0.2);
-}
-
-.success-msg {
-  background-color: rgba(0, 230, 118, 0.1);
-  color: var(--success);
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  border: 1px solid rgba(0, 230, 118, 0.2);
 }
 
 /* Search Bar Styles */

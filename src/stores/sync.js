@@ -33,7 +33,7 @@ export const useSyncStore = defineStore('sync', () => {
       while (queue.value.length > 0) {
         const payload = queue.value[0]
         try {
-          const response = await api.post('/workout-logs', payload)
+          const response = await api.post('/workout-logs', payload, { suppressErrorToast: true })
           const saved = response.data && response.data.data
           // Only touch an already-loaded history list; otherwise the next
           // History visit fetches fresh (see workout store note).
