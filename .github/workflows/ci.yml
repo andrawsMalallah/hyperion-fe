@@ -1,0 +1,35 @@
+name: CI
+
+# Verifies the production build compiles on every push to main and on PRs.
+# `npm run build` runs `vite build` in production mode, so it uses
+# .env.production (the live API URL) — the same output that ships in dist/.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 22 LTS — satisfies Vite 8's engine requirement
+      # (^20.19 || >=22.12). Local dev runs Node 25; bump here to match if a
+      # build ever depends on a newer runtime.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
