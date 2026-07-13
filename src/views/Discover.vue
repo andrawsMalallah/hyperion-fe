@@ -2,10 +2,20 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDiscoverStore } from '../stores/discover'
+import { useToastStore } from '../stores/toast'
+import { useAuthStore } from '../stores/auth'
 import AppModal from '../components/AppModal.vue'
 
 const router = useRouter()
 const discoverStore = useDiscoverStore()
+const toast = useToastStore()
+const authStore = useAuthStore()
+
+// You can't "save" a program you already own — hide the clone action on your
+// own programs (the backend rejects it too, as a second layer).
+const isOwnProgram = computed(
+  () => !!(selectedProgram.value && authStore.user && selectedProgram.value.user?.id === authStore.user.id)
+)
 
 const searchQuery = computed({
   get: () => discoverStore.searchQuery,
@@ -15,6 +25,7 @@ const programs = computed(() => discoverStore.discoverPrograms)
 const loading = computed(() => discoverStore.discoverLoading)
 const hasMore = computed(() => discoverStore.discoverHasMore)
 const selectedProgram = ref(null)
+const cloning = ref(false)
 const loaderRef = ref(null)
 let observer = null
 
@@ -51,6 +62,21 @@ function openModal(Program) {
 
 function closeModal() {
   selectedProgram.value = null
+}
+
+async function handleClone() {
+  if (!selectedProgram.value || cloning.value) return
+  cloning.value = true
+  try {
+    await discoverStore.cloneProgram(selectedProgram.value.id)
+    toast.success('Saved to your programs')
+    closeModal()
+  } catch (e) {
+    // Failure is already surfaced by the api interceptor; keep the modal open
+    // so the user can retry.
+  } finally {
+    cloning.value = false
+  }
 }
 
 watch(selectedProgram, (newVal) => {
@@ -154,7 +180,7 @@ onUnmounted(() => {
             <span class="Program-creator" v-if="Program.user?.name">by {{ Program.user.name }}</span>
           </div>
           <button class="eye-btn tap-target" @click="openModal(Program)" title="View Details">
-            <svg class="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
@@ -190,15 +216,35 @@ onUnmounted(() => {
 
     <!-- Detail Modal (Premium Overlay) -->
     <AppModal 
-      v-model:show="selectedProgram"
+      :show="selectedProgram"
       type="custom"
       maxWidth="500px"
       @cancel="closeModal"
     >
       <template #header>
-        <div class="modal-title-box">
-          <h2 class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ selectedProgram.name }}</h2>
-          <span class="modal-creator-tag" v-if="selectedProgram.user?.name">Created by {{ selectedProgram.user.name }}</span>
+        <div class="modal-header-row">
+          <div class="modal-title-box">
+            <h2 class="subtitle m-0 text-accent" style="font-weight: 800; font-size: 20px; line-height: 1.2;">{{ selectedProgram.name }}</h2>
+            <span class="modal-creator-tag" v-if="selectedProgram.user?.name">Created by {{ selectedProgram.user.name }}</span>
+          </div>
+          <template v-if="!isOwnProgram">
+            <button
+              v-if="!selectedProgram.already_saved"
+              class="save-icon-btn"
+              :disabled="cloning"
+              :title="cloning ? 'Saving…' : 'Save to my programs'"
+              @click="handleClone"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </button>
+            <span v-else class="saved-icon" title="Saved to your programs">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </span>
+          </template>
         </div>
       </template>
 
@@ -295,8 +341,8 @@ onUnmounted(() => {
 }
 
 .eye-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
@@ -408,5 +454,60 @@ onUnmounted(() => {
   font-size: 13px;
   font-style: italic;
   padding: 4px 0;
+}
+
+/* Save / saved action lives in the modal header, beside the close button.
+   The header row spans the full width so the icon can push to the right. */
+.modal-header-row {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.save-icon-btn,
+.saved-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+/* Match the close button's icon size (32×32 box, 14px glyph). */
+.save-icon-btn svg,
+.saved-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.save-icon-btn {
+  border: 1px solid var(--primary-accent);
+  background: transparent;
+  color: var(--primary-accent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-icon-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Guard the hover fill so it doesn't stick after a tap on touch devices. */
+@media (hover: hover) {
+  .save-icon-btn:hover:not(:disabled) {
+    background: var(--primary-accent);
+    color: var(--bg-main);
+  }
+}
+
+.saved-icon {
+  border: 1px solid var(--primary-accent);
+  color: var(--primary-accent);
 }
 </style>

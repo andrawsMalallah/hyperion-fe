@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
 import { useToastStore } from './toast'
+import { useProgramStore } from './program'
 
 export const useDiscoverStore = defineStore('discover', () => {
   const discoverPrograms = ref([])
@@ -58,6 +59,21 @@ export const useDiscoverStore = defineStore('discover', () => {
     }
   }
 
+  // Deep-copy a public program into the user's own account (server-side) and
+  // ingest the returned copy so it shows on Home right away. Throws on failure
+  // so the caller can reset its busy state; the api interceptor toasts errors.
+  async function cloneProgram(programId) {
+    const response = await api.post(`/programs/${programId}/clone`)
+    const newProgram = response.data.data
+    useProgramStore().ingestProgram(newProgram)
+    // Reflect the saved state on the local Discover entry so reopening the
+    // source shows "Saved" without a refetch (the backend `already_saved` flag
+    // persists it across reloads).
+    const source = discoverPrograms.value.find(p => String(p.id) === String(programId))
+    if (source) source.already_saved = true
+    return newProgram
+  }
+
   function reset() {
     discoverPrograms.value = []
     discoverPage.value = 1
@@ -75,6 +91,7 @@ export const useDiscoverStore = defineStore('discover', () => {
     searchQuery,
     isLoaded,
     fetchDiscoverPrograms,
+    cloneProgram,
     reset
   }
 })

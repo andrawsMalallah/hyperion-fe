@@ -390,6 +390,36 @@ export const useProgramStore = defineStore('program', () => {
     }
   }
 
+  // Insert a program returned fresh from the API (e.g. a Discover clone) into
+  // local state so it appears in the user's programs immediately, without
+  // waiting for the list cache to revalidate.
+  function ingestProgram(apiProgram) {
+    const meta = {
+      id: apiProgram.id,
+      name: apiProgram.name,
+      is_active: apiProgram.is_active,
+      is_public: apiProgram.is_public,
+      created_at: apiProgram.created_at
+    }
+    const idx = user_programs.value.findIndex(item => String(item.id) === String(apiProgram.id))
+    if (idx !== -1) user_programs.value[idx] = meta
+    else user_programs.value.push(meta)
+
+    program_days.value = program_days.value.filter(d => String(d.program_id) !== String(apiProgram.id))
+
+    const exerciseStore = useExerciseStore()
+    ;(apiProgram.days || []).forEach(d => {
+      d.exercises.forEach(e => {
+        if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
+          exerciseStore.exercises.push(e)
+        }
+      })
+      program_days.value.push(mapApiDay(d, apiProgram.id))
+    })
+
+    fetchedprogramIds.value.add(String(apiProgram.id))
+  }
+
   function reset() {
     user_programs.value = []
     program_days.value = []
@@ -418,6 +448,7 @@ export const useProgramStore = defineStore('program', () => {
     updateDayExercises,
     renameProgram,
     syncProgramDays,
+    ingestProgram,
     reset
   }
 })
