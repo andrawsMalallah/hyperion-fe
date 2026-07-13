@@ -75,7 +75,7 @@ function onSearchInput() {
   }
   searchTimeout = setTimeout(() => {
     exerciseStore.fetchExercises(true, false)
-  }, 1500)
+  }, 350)
 }
 
 const clearSearch = () => {

@@ -427,6 +427,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 }, {
   persist: {
-    paths: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'restEndsAt', 'timerEnabled', 'defaultRestTime', 'weightUnit']
+    pick: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'restEndsAt', 'timerEnabled', 'defaultRestTime', 'weightUnit']
   }
 })
