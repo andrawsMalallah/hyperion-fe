@@ -17,6 +17,8 @@ export const useProgressStore = defineStore('progress', () => {
   const loading = ref(false)
   const isLoaded = ref(false)
   const loadFailed = ref(false)
+  // True while a single exercise's series is being lazy-loaded on selection.
+  const seriesLoading = ref(false)
 
   const STALE_AFTER_MS = 60000
   let lastLoadedAt = 0
@@ -47,6 +49,25 @@ export const useProgressStore = defineStore('progress', () => {
     }
   }
 
+  // Lazy-load one exercise's e1RM series on selection. No-op if already cached
+  // (the page ships only the first exercise upfront; the rest come from here).
+  async function fetchExerciseSeries(exerciseId) {
+    if (exerciseId == null) return
+    if (e1rmByExercise.value[exerciseId]) return // already cached — no API call
+
+    seriesLoading.value = true
+    try {
+      const response = await api.get(`/progress/exercises/${exerciseId}/e1rm`, { suppressErrorToast: true })
+      // Replace the object (not mutate) so the computed that reads it re-runs.
+      e1rmByExercise.value = { ...e1rmByExercise.value, [exerciseId]: response.data.data || [] }
+    } catch (e) {
+      console.error('Failed to fetch exercise series:', e)
+      useToastStore().error('Could not load this exercise’s history.')
+    } finally {
+      seriesLoading.value = false
+    }
+  }
+
   function reset() {
     week.value = { sessions: 0, volume: 0 }
     exercises.value = []
@@ -55,6 +76,7 @@ export const useProgressStore = defineStore('progress', () => {
     e1rmByExercise.value = {}
     isLoaded.value = false
     loadFailed.value = false
+    seriesLoading.value = false
     lastLoadedAt = 0
   }
 
@@ -67,7 +89,9 @@ export const useProgressStore = defineStore('progress', () => {
     loading,
     isLoaded,
     loadFailed,
+    seriesLoading,
     fetchStats,
+    fetchExerciseSeries,
     reset
   }
 })

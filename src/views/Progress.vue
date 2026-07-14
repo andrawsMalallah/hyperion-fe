@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useProgressStore } from '../stores/progress'
 import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
@@ -41,6 +41,15 @@ const hasData = computed(() => progressStore.exercises.length > 0)
 const exerciseOptions = computed(() => progressStore.exercises)
 
 const selectedExerciseId = ref(null)
+
+// True while the selected exercise's series is being lazy-fetched.
+const seriesLoading = computed(() => progressStore.seriesLoading)
+
+// The page ships only the first exercise's series; fetch the rest on demand when
+// the dropdown changes (cached after the first load, so no repeat call).
+watch(selectedExerciseId, (id) => {
+  if (id != null) progressStore.fetchExerciseSeries(id)
+})
 
 // ---- Stat tiles (server-computed)
 const weekStats = computed(() => progressStore.week)
@@ -162,7 +171,9 @@ function scrollToPRs() {
 
 const dateFmt = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
-const showTable = ref(false)
+// Best working set from the 5 most recent sessions of the selected exercise,
+// newest first (trendPoints is oldest-first).
+const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5))
 </script>
 
 <template>
@@ -253,7 +264,14 @@ const showTable = ref(false)
         <h2 class="chart-title">Estimated 1RM ({{ unit }})</h2>
         <p class="chart-sub">Best working set per session · Epley: weight × (1 + reps ÷ 30)</p>
 
-        <div v-if="!trendGeo" class="chart-empty">Need at least two sessions of this exercise to draw a trend.</div>
+        <!-- Skeleton while the selected exercise's series lazy-loads -->
+        <div v-if="seriesLoading" class="skel-chart" style="height: 188px;" aria-hidden="true">
+          <div class="skel-chart-grid"><span v-for="g in 4" :key="g"></span></div>
+          <div class="skel-chart-bars">
+            <span v-for="(b, i) in 7" :key="i" class="sk sk-shimmer" :style="{ height: [45, 62, 38, 70, 55, 80, 60][i] + '%' }"></span>
+          </div>
+        </div>
+        <div v-else-if="!trendGeo" class="chart-empty">Need at least two sessions of this exercise to draw a trend.</div>
         <div v-else class="chart-holder">
           <div class="chart-scroll" @scroll="lineScrollLeft = $event.target.scrollLeft">
             <svg :width="trendGeo.width" :height="LINE_H" @mousemove="onLineMove" @mouseleave="lineHover = null" @touchstart="onLineTouch" role="img" :aria-label="`Estimated one rep max trend, ${trendPoints.length} sessions`">
@@ -298,6 +316,30 @@ const showTable = ref(false)
             <span class="tt-muted">est. {{ formatWeight(lineHover.e1rm, unit) }}{{ unit }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Recent top sets: best working set from the last 5 sessions of the
+           selected exercise (always visible, newest first) -->
+      <div class="card chart-card mb-24" v-if="seriesLoading || recentTopSets.length > 0">
+        <h2 class="chart-title">Recent Top Sets</h2>
+        <p class="chart-sub">Best working set from your last 5 sessions</p>
+        <!-- Skeleton rows while the selected exercise's series lazy-loads -->
+        <div v-if="seriesLoading" class="topsets-skeleton" aria-hidden="true">
+          <div v-for="n in 5" :key="n" class="sk sk-shimmer topsets-skel-row"></div>
+        </div>
+        <table v-else class="data-table">
+          <caption class="visually-hidden">Best set per session for the selected exercise, most recent first</caption>
+          <thead>
+            <tr><th>Date</th><th>Best set</th><th>Est. 1RM ({{ unit }})</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in recentTopSets" :key="p.date.getTime()">
+              <td>{{ p.date.toLocaleDateString() }}</td>
+              <td>{{ formatWeight(p.weight, unit) }}{{ unit }} × {{ p.reps }}</td>
+              <td>{{ formatWeight(p.e1rm, unit) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Weekly volume -->
@@ -349,29 +391,6 @@ const showTable = ref(false)
         </div>
       </div>
 
-      <!-- Table fallback -->
-      <div class="card chart-card mb-24" v-if="trendPoints.length > 0">
-        <button class="table-toggle" @click="showTable = !showTable" :aria-expanded="showTable">
-          {{ showTable ? 'Hide' : 'Show' }} data table
-        </button>
-        <div class="table-collapse" :class="{ 'table-collapse--open': showTable }">
-          <div class="table-collapse-inner">
-            <table class="data-table">
-              <caption class="visually-hidden">Best set per session for the selected exercise</caption>
-              <thead>
-                <tr><th>Date</th><th>Best set</th><th>Est. 1RM ({{ unit }})</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in [...trendPoints].reverse()" :key="p.date.getTime()">
-                  <td>{{ p.date.toLocaleDateString() }}</td>
-                  <td>{{ formatWeight(p.weight, unit) }}{{ unit }} × {{ p.reps }}</td>
-                  <td>{{ formatWeight(p.e1rm, unit) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </template>
   </div>
 </template>
@@ -688,47 +707,6 @@ const showTable = ref(false)
   flex-shrink: 0;
 }
 
-.table-toggle {
-  background: none;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.table-toggle:hover {
-  color: var(--text-primary);
-  border-color: var(--primary-accent);
-}
-
-/* Smooth expand/collapse — the table stays mounted and its height animates
-   via the grid-rows 0fr→1fr technique (no JS, reversible both ways). */
-.table-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows 0.28s ease, opacity 0.28s ease;
-}
-
-.table-collapse--open {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-.table-collapse-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .table-collapse {
-    transition: none;
-  }
-}
-
 .data-table {
   width: 100%;
   margin-top: 12px;
@@ -750,6 +728,18 @@ const showTable = ref(false)
   padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
+}
+
+/* Recent Top Sets loading placeholder (5 rows) */
+.topsets-skeleton {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topsets-skel-row {
+  height: 22px;
 }
 
 .visually-hidden {
