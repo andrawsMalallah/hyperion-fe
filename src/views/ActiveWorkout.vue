@@ -5,6 +5,8 @@ import { useProgramStore } from '../stores/program'
 import { useWorkoutStore } from '../stores/workout'
 import { useExerciseStore } from '../stores/exercise'
 import { useToastStore } from '../stores/toast'
+import { useHistoryStore } from '../stores/history'
+import { useSyncStore } from '../stores/sync'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { toKg, formatWeight } from '../utils/units'
@@ -19,6 +21,8 @@ const programStore = useProgramStore()
 const workoutStore = useWorkoutStore()
 const exerciseStore = useExerciseStore()
 const toast = useToastStore()
+const historyStore = useHistoryStore()
+const syncStore = useSyncStore()
 
 // If dayId isn't found locally, it's fine, we try to match it.
 // To handle the API type (it could be an integer ID now from the API)
@@ -262,6 +266,9 @@ const isLeaving = ref(false)
 const showSavedModal = ref(false)
 const savedOffline = ref(false)
 const savedSummary = ref(null)
+// Session notes typed into the summary modal. The workout is already saved by
+// the time the modal shows, so notes are attached as a follow-up on dismissal.
+const sessionNotes = ref('')
 
 // Duration as "1h 12m" / "34m" / "45s".
 function formatDuration(ms) {
@@ -291,8 +298,27 @@ let navigatingHome = false
 function goHome() {
   if (navigatingHome) return
   navigatingHome = true
+  commitSessionNotes() // fire-and-forget; notes aren't on the critical path
   showSavedModal.value = false
   setTimeout(() => router.push('/'), 300) // matches .modal-fade leave duration
+}
+
+// Attach the typed notes to the just-saved workout. Online → PUT (updates the
+// local history entry too); offline → patch the still-queued payload so the
+// notes upload with it. Best-effort: a failure here never blocks navigation.
+async function commitSessionNotes() {
+  const notes = sessionNotes.value.trim()
+  if (!notes || !savedSummary.value) return
+  const { logId, clientUuid, status } = savedSummary.value
+  try {
+    if (status === 'offline') {
+      syncStore.setNotes(clientUuid, notes)
+    } else if (logId) {
+      await historyStore.updateWorkout(logId, { notes })
+    }
+  } catch (e) {
+    console.error('Failed to save workout notes:', e)
+  }
 }
 
 const hasCompletedSets = computed(() => {
@@ -360,6 +386,7 @@ async function saveWorkout() {
     isSaving.value = false
     savedOffline.value = result?.status === 'offline'
     savedSummary.value = result
+    sessionNotes.value = ''
     showSavedModal.value = true
   } catch {
     // A server rejection (e.g. 422) is surfaced as a toast by the interceptor.
@@ -587,6 +614,18 @@ async function saveWorkout() {
             </li>
           </ul>
         </div>
+
+        <div class="ws-notes">
+          <label for="ws-notes-input" class="ws-notes-label">Notes (optional)</label>
+          <textarea
+            id="ws-notes-input"
+            v-model="sessionNotes"
+            class="ws-notes-input"
+            rows="3"
+            maxlength="1000"
+            placeholder="How did it go? Aches, PRs, form cues…"
+          ></textarea>
+        </div>
       </div>
     </AppModal>
 
@@ -742,6 +781,44 @@ async function saveWorkout() {
   border-radius: 12px;
   border: 1px solid var(--border-color);
   background-color: var(--bg-surface);
+}
+
+.ws-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-notes-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.ws-notes-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 68px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.ws-notes-input:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+.ws-notes-input::placeholder {
+  color: var(--text-secondary);
 }
 
 .ws-prs-title {

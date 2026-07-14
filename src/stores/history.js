@@ -56,6 +56,27 @@ export const useHistoryStore = defineStore('history', () => {
     }
   }
 
+  // Delete a logged workout. Removes it from the local list on success so the
+  // History view updates without a refetch. Server-side best_e1rm recomputes on
+  // the next recent-sets call, so PR data self-corrects.
+  async function deleteWorkout(id) {
+    await api.delete(`/workout-logs/${id}`)
+    workout_logs.value = workout_logs.value.filter(l => l.id !== id)
+  }
+
+  // Replace a workout's sets and/or notes (edit modal, or a notes-only patch
+  // from the post-save summary). Splices the server's fresh copy back into the
+  // local list so the card re-renders immediately.
+  async function updateWorkout(id, payload) {
+    const response = await api.put(`/workout-logs/${id}`, payload)
+    const saved = response.data && response.data.data
+    if (saved) {
+      const idx = workout_logs.value.findIndex(l => l.id === id)
+      if (idx !== -1) workout_logs.value[idx] = saved
+    }
+    return saved
+  }
+
   function reset() {
     workout_logs.value = []
     historyPage.value = 1
@@ -73,6 +94,8 @@ export const useHistoryStore = defineStore('history', () => {
     loadFailed,
     isLoaded,
     fetchHistory,
+    deleteWorkout,
+    updateWorkout,
     reset
   }
 })

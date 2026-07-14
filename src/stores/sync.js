@@ -17,6 +17,14 @@ export const useSyncStore = defineStore('sync', () => {
     queue.value.push(payload)
   }
 
+  // Attach notes to a still-queued payload (offline path: the summary modal
+  // captures notes after the workout was already enqueued). They upload with
+  // the workout when the queue next drains.
+  function setNotes(clientUuid, notes) {
+    const item = queue.value.find(p => p.client_uuid === clientUuid)
+    if (item) item.notes = notes || null
+  }
+
   // Drain the outbox oldest-first. Stops on the first network failure so the
   // remaining items keep their order and are retried next time we're online.
   async function flush() {
@@ -65,7 +73,7 @@ export const useSyncStore = defineStore('sync', () => {
     }
   }
 
-  return { queue, flushing, pendingCount, enqueue, flush }
+  return { queue, flushing, pendingCount, enqueue, setNotes, flush }
 }, {
   // Persist only the outbox — never the transient `flushing` flag, which
   // would otherwise rehydrate as true mid-flight and wedge every retry.

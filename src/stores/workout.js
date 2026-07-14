@@ -59,10 +59,14 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 
   // Resolves to a summary object once saved (server) or queued (offline):
-  //   { status: 'online' | 'offline', prs, sets, volume, durationMs }
-  // `prs` are enriched with the exercise name for display. Throws only on a
-  // server-side rejection (e.g. 422), leaving the session intact. Returns null
-  // when there is nothing to save.
+  //   { status: 'online' | 'offline', prs, sets, volume, durationMs,
+  //     logId, clientUuid }
+  // `prs` are enriched with the exercise name for display. `logId` is the saved
+  // server id (null when queued offline) and `clientUuid` identifies the queued
+  // payload — together they let the summary modal attach session notes after
+  // the save (online via PUT, offline by patching the queued payload). Throws
+  // only on a server-side rejection (e.g. 422), leaving the session intact.
+  // Returns null when there is nothing to save.
   async function finishWorkout() {
     if (!activeWorkoutDayId.value || activeWorkoutSets.value.length === 0) {
       cancelWorkout()
@@ -117,7 +121,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       stopRestTimer()
       // Opportunistically drain anything queued from an earlier outage.
       useSyncStore().flush()
-      return { status: 'online', ...summary }
+      const savedId = response.data?.data?.id ?? null
+      return { status: 'online', ...summary, logId: savedId, clientUuid: payload.client_uuid }
     } catch (e) {
       // No response at all means offline / network failure — not a rejection.
       // Queue the workout locally and treat it as saved; it will upload when
@@ -127,7 +132,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         markDayPerformed(payload.program_day_id, payload.ended_at)
         clearActiveWorkout()
         stopRestTimer()
-        return { status: 'offline', ...summary }
+        return { status: 'offline', ...summary, logId: null, clientUuid: payload.client_uuid }
       }
       // The server responded with an error (e.g. validation). Keep the
       // session intact so the user can fix it, and surface the failure.

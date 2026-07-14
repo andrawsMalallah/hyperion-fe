@@ -4,11 +4,59 @@ import { useRouter } from 'vue-router'
 import { useHistoryStore } from '../stores/history'
 import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import AppModal from '../components/AppModal.vue'
+import EditWorkoutModal from '../components/EditWorkoutModal.vue'
+import { useToastStore } from '../stores/toast'
 import { formatWeight } from '../utils/units'
 
 const router = useRouter()
 const historyStore = useHistoryStore()
 const workoutStore = useWorkoutStore()
+const toast = useToastStore()
+
+// Per-card overflow (⋯) menu, delete confirm, and edit modal.
+const openMenuId = ref(null)
+const showDeleteModal = ref(false)
+const deleteTarget = ref(null)
+const deleting = ref(false)
+const showEditModal = ref(false)
+const editTarget = ref(null)
+
+function toggleMenu(id) {
+  openMenuId.value = openMenuId.value === id ? null : id
+}
+
+function closeMenu() {
+  openMenuId.value = null
+}
+
+function askDelete(w) {
+  closeMenu()
+  deleteTarget.value = w
+  showDeleteModal.value = true
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value || deleting.value) return
+  deleting.value = true
+  try {
+    await historyStore.deleteWorkout(deleteTarget.value.id)
+    toast.success('Workout deleted')
+    showDeleteModal.value = false
+    deleteTarget.value = null
+  } catch (e) {
+    console.error('Failed to delete workout:', e)
+  } finally {
+    deleting.value = false
+  }
+}
+
+function openEdit(w) {
+  closeMenu()
+  // Pass the raw log (with grouped sets + exercise) the store holds.
+  editTarget.value = rawLogs.value.find(l => l.id === w.id) || null
+  showEditModal.value = true
+}
 
 const rawLogs = computed(() => historyStore.workout_logs)
 const loading = computed(() => historyStore.historyLoading)
@@ -153,7 +201,28 @@ onUnmounted(() => {
             <h2 class="subtitle m-0 text-accent" style="font-weight: 700;">{{ w.dayName }}</h2>
             <span class="history-Program-tag">{{ w.ProgramName }}</span>
           </div>
-          <span class="history-date-badge">{{ w.dateStr }}</span>
+          <div class="history-header-right">
+            <span class="history-date-badge">{{ w.dateStr }}</span>
+            <div class="history-menu-wrap">
+              <button class="history-menu-btn" @click.stop="toggleMenu(w.id)" :aria-expanded="openMenuId === w.id" aria-haspopup="true" title="Workout actions" aria-label="Workout actions">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1.6"></circle>
+                  <circle cx="12" cy="12" r="1.6"></circle>
+                  <circle cx="12" cy="19" r="1.6"></circle>
+                </svg>
+              </button>
+              <div v-if="openMenuId === w.id" class="history-menu" @click.stop>
+                <button class="history-menu-item" @click="openEdit(w)">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                  Edit
+                </button>
+                <button class="history-menu-item history-menu-item--danger" @click="askDelete(w)">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Stats Grid (Premium visual summary) -->
@@ -188,6 +257,12 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- Session notes -->
+        <div v-if="w.notes" class="history-notes">
+          <span class="history-notes-label">Notes</span>
+          <p class="history-notes-text">{{ w.notes }}</p>
+        </div>
       </div>
     </TransitionGroup>
 
@@ -217,10 +292,45 @@ onUnmounted(() => {
         No more data to display
       </div>
     </div>
+
+    <!-- Click-catcher to dismiss an open overflow menu -->
+    <div v-if="openMenuId !== null" class="history-menu-backdrop" @click="closeMenu"></div>
+
+    <!-- Delete confirm -->
+    <AppModal
+      v-model:show="showDeleteModal"
+      title="Delete workout?"
+      message="This permanently removes this logged workout and all its sets. This can't be undone."
+      confirm-text="Delete"
+      cancel-text="Cancel"
+      @confirm="confirmDelete"
+    />
+
+    <!-- Edit workout -->
+    <EditWorkoutModal
+      v-model:show="showEditModal"
+      :workout="editTarget"
+      :weight-unit="workoutStore.weightUnit"
+    />
   </div>
 </template>
 
 <style scoped>
+/* Header row: keep the Progress pill (and its icon) at natural size — on a
+   narrow phone the long title would otherwise squeeze the flex row and
+   collapse the SVG. Let the title absorb the squeeze / wrap instead. */
+.history-page .flex-row > .title {
+  min-width: 0;
+}
+
+.progress-link {
+  flex-shrink: 0;
+}
+
+.progress-link svg {
+  flex-shrink: 0;
+}
+
 .back-btn {
   transition: all 0.2s ease;
 }
@@ -247,6 +357,118 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   border-bottom: 1px solid var(--border-color);
+}
+
+.history-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Overflow (⋯) menu */
+.history-menu-wrap {
+  position: relative;
+}
+
+.history-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 23px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .history-menu-btn:hover {
+    color: var(--primary-accent);
+    border-color: var(--primary-accent);
+  }
+}
+
+.history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 148px;
+  padding: 6px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .history-menu-item:hover {
+    background-color: var(--bg-surface-hover);
+  }
+}
+
+.history-menu-item--danger {
+  color: var(--danger, #ff5252);
+}
+
+/* Full-screen catcher so any outside click closes the menu. */
+.history-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+}
+
+/* Session notes */
+.history-notes {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background-color: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.history-notes-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.history-notes-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .header-main-info {
