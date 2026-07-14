@@ -362,10 +362,14 @@ const getMuscleGroupColor = muscleGroupColor
           <TransitionGroup name="day" tag="div" class="days-panel">
             <div v-for="(day, dayIndex) in localDays" :key="day.id" class="card day-card">
               <div class="day-header">
-                <input class="day-name-input" :value="day.day_name"
-                  @input="updateDayName(day, $event.target.value)"
-                  @keydown.enter.prevent="$event.target.blur()" maxlength="255"
-                  placeholder="Day name" aria-label="Day name" />
+                <!-- Wrapper mirrors the value in a hidden ::after (see .day-name-field
+                     in style.css) so the input auto-sizes to its text, not the row. -->
+                <label class="day-name-field" :data-value="day.day_name || 'Day name'">
+                  <input class="day-name-input" :value="day.day_name"
+                    @input="updateDayName(day, $event.target.value)"
+                    @keydown.enter.prevent="$event.target.blur()" maxlength="255"
+                    placeholder="Day name" aria-label="Day name" />
+                </label>
                 <div class="day-actions gap-8">
                   <button class="btn-secondary day-action-btn" :disabled="dayIndex === 0"
                     @click="moveDayUp(day)" title="Move Day Up" aria-label="Move day up">
@@ -510,6 +514,14 @@ const getMuscleGroupColor = muscleGroupColor
                           <input type="number" min="0" max="600" step="15"
                             v-model.number="day.prescriptions[element.id].rest_seconds" @input="isDirty = true"
                             placeholder="90" />
+                        </label>
+                        <!-- Full-width coaching note (spans the whole grid row); shown
+                             read-only under the exercise on the Active Workout screen. -->
+                        <label class="rx-field rx-field-notes">
+                          <span>Notes</span>
+                          <textarea rows="2" maxlength="500"
+                            v-model="day.prescriptions[element.id].notes" @input="isDirty = true"
+                            placeholder="Coaching cue — e.g. pause 1s at the bottom, elbows tucked"></textarea>
                         </label>
                       </div>
                     </div>
@@ -942,6 +954,31 @@ const getMuscleGroupColor = muscleGroupColor
 }
 
 .rx-field input:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+/* Notes field spans the full editor grid (it's free text, not a numeric cell). */
+.rx-field-notes {
+  grid-column: 1 / -1;
+}
+
+.rx-field textarea {
+  width: 100%;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 9px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 42px;
+}
+
+.rx-field textarea:focus {
   outline: none;
   border-color: var(--primary-accent);
 }

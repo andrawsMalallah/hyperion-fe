@@ -686,11 +686,39 @@ body {
 
 /* Inline-editable day name: reads as a title, uses only a bottom border
    (an underline field) that brightens on hover and turns accent on focus.
-   Shrinks so the actions never wrap. */
-.day-name-input {
-  flex: 1;
+   The field auto-sizes to its text (so the underline covers only the name,
+   not the whole row) via an inline-grid sizer: the label's ::after mirrors
+   the current value and shares the input's grid cell, so the cell — and the
+   input — is exactly as wide as the text. Still shrinks (min-width: 0) so the
+   day actions never wrap. */
+.day-name-field {
+  display: inline-grid;
+  align-items: center;
   min-width: 0;
+  max-width: 100%;
   margin-right: 8px;
+}
+
+/* The hidden text sizer must render with the exact same font/padding as the
+   input so the measured width matches. The trailing padding leaves room for
+   the caret at the end of the text. */
+.day-name-field::after {
+  content: attr(data-value);
+  visibility: hidden;
+  white-space: pre;
+  grid-area: 1 / 1;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 2px 4px 0;
+}
+
+.day-name-input {
+  grid-area: 1 / 1;
+  /* width: 0 keeps the input's default ~20ch intrinsic width out of the grid
+     track sizing (so the track collapses to the text sizer); min-width: 100%
+     then stretches it back to fill that text-width cell. */
+  width: 0;
+  min-width: 100%;
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
@@ -698,12 +726,12 @@ body {
   border: none;
   border-bottom: 1px solid transparent;
   border-radius: 0;
-  padding: 4px 0;
+  padding: 4px 2px 4px 0;
   transition: border-color 0.2s ease;
 }
 
 @media (hover: hover) {
-  .day-name-input:hover {
+  .day-name-field:hover .day-name-input {
     border-bottom-color: var(--border-color);
   }
 }

@@ -432,6 +432,7 @@ async function saveWorkout() {
             <div class="ex-title-block">
               <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
               <span v-if="rxLabel(ex.rx)" class="rx-target-hint">{{ rxLabel(ex.rx) }}</span>
+              <span v-if="ex.rx?.notes" class="rx-note">{{ ex.rx.notes }}</span>
               <span v-if="ex.prevSets && ex.prevSets.length > 0" class="prev-session-hint">
                 Last: {{ formatPrevSets(ex.prevSets) }}
               </span>
@@ -707,6 +708,19 @@ async function saveWorkout() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Read-only coaching note from the program's prescription. Unlike the target /
+   last-session hints it wraps (a cue is meant to be read in full) and preserves
+   any line breaks the author typed in the builder. */
+.rx-note {
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .warmup-toggle {
