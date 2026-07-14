@@ -177,7 +177,7 @@ onUnmounted(() => {
 
         <!-- Two exercise-group placeholders with set pills -->
         <div class="history-exercises-list">
-          <div v-for="i in 2" :key="'ex-' + i" class="history-exercise-group">
+          <div v-for="i in 2" :key="'ex-' + i" class="history-exercise-group sk-exercise-group">
             <div class="sk sk-shimmer" style="width: 130px; height: 14px;"></div>
             <div class="history-sets-flex mt-8">
               <div v-for="p in (i === 1 ? 4 : 3)" :key="p" class="sk sk-shimmer" style="width: 82px; height: 24px; border-radius: 6px;"></div>
@@ -595,6 +595,12 @@ onUnmounted(() => {
 
 @keyframes sk-sheen {
   100% { transform: translateX(100%); }
+}
+
+/* Skeleton exercise groups drop the gold accent stripe that marks a real
+   group — on a gray placeholder it just reads as a stray colored border. */
+.sk-exercise-group {
+  border-left: 1px solid var(--border-color);
 }
 
 /* Skeleton header aligns its two rows to the top like the real one. */

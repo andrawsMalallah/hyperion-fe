@@ -1,22 +1,27 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
+// Eagerly loaded views — the core path a user hits first, kept in the main
+// bundle so the initial screen paints without an extra network round-trip.
 import Home from '../views/Home.vue'
-import ProgramBuilder from '../views/ProgramBuilder.vue'
 import ActiveWorkout from '../views/ActiveWorkout.vue'
-import CreateProgram from '../views/CreateProgram.vue'
-import Settings from '../views/Settings.vue'
-import Profile from '../views/Profile.vue'
-import History from '../views/History.vue'
-import Progress from '../views/Progress.vue'
-import Discover from '../views/Discover.vue'
-import Contribute from '../views/Contribute.vue'
-
-// Auth Views
 import Login from '../views/auth/Login.vue'
-import Register from '../views/auth/Register.vue'
-import ForgotPassword from '../views/auth/ForgotPassword.vue'
-import ResetPassword from '../views/auth/ResetPassword.vue'
+
+// Everything else is lazy-loaded: each becomes its own chunk fetched only when
+// the route is first visited, so login no longer downloads the whole app.
+const ProgramBuilder = () => import('../views/ProgramBuilder.vue')
+const CreateProgram = () => import('../views/CreateProgram.vue')
+const Settings = () => import('../views/Settings.vue')
+const Profile = () => import('../views/Profile.vue')
+const History = () => import('../views/History.vue')
+const Progress = () => import('../views/Progress.vue')
+const Discover = () => import('../views/Discover.vue')
+const Contribute = () => import('../views/Contribute.vue')
+
+// Auth Views (Login stays eager above — it is the first screen for guests)
+const Register = () => import('../views/auth/Register.vue')
+const ForgotPassword = () => import('../views/auth/ForgotPassword.vue')
+const ResetPassword = () => import('../views/auth/ResetPassword.vue')
 
 const routes = [
   {
