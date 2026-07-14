@@ -478,6 +478,7 @@ async function saveWorkout() {
               <div class="set-col">
                 <input
                   type="number"
+                  inputmode="decimal"
                   class="input-large set-input"
                   v-model="s.weight"
                   :placeholder="workoutStore.weightUnit"
@@ -489,6 +490,7 @@ async function saveWorkout() {
               <div class="set-col">
                 <input
                   type="number"
+                  inputmode="numeric"
                   class="input-large set-input"
                   v-model="s.reps"
                   placeholder="Reps"
@@ -500,6 +502,7 @@ async function saveWorkout() {
               <div class="set-col rpe-col">
                 <input
                   type="number"
+                  inputmode="numeric"
                   class="input-large set-input"
                   v-model="s.rpe"
                   placeholder="RPE"

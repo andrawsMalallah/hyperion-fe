@@ -1,15 +1,14 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useHistoryStore } from '../stores/history'
 import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import BackButton from '../components/BackButton.vue'
 import AppModal from '../components/AppModal.vue'
 import EditWorkoutModal from '../components/EditWorkoutModal.vue'
 import { useToastStore } from '../stores/toast'
 import { formatWeight } from '../utils/units'
 
-const router = useRouter()
 const historyStore = useHistoryStore()
 const workoutStore = useWorkoutStore()
 const toast = useToastStore()
@@ -145,11 +144,7 @@ onUnmounted(() => {
   <div class="history-page">
     <!-- Header with Back Button -->
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
-      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
+      <BackButton />
       <h1 class="title m-0">Workout History</h1>
       <router-link to="/progress" class="btn-secondary tap-target no-underline progress-link" style="margin-left: auto; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -329,21 +324,6 @@ onUnmounted(() => {
 
 .progress-link svg {
   flex-shrink: 0;
-}
-
-.back-btn {
-  transition: all 0.2s ease;
-}
-
-.back-btn:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--primary-accent);
-  border-color: var(--primary-accent);
-  transform: translateX(-1px);
-}
-
-.back-btn:active {
-  transform: translateX(0);
 }
 
 .history-card {

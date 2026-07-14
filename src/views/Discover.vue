@@ -1,12 +1,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useDiscoverStore } from '../stores/discover'
 import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
 import AppModal from '../components/AppModal.vue'
+import BackButton from '../components/BackButton.vue'
 
-const router = useRouter()
 const discoverStore = useDiscoverStore()
 const toast = useToastStore()
 const authStore = useAuthStore()
@@ -122,11 +121,7 @@ onUnmounted(() => {
   <div class="discover-page">
     <!-- Header with Back Button -->
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
-      <button class="btn-secondary back-btn tap-target" @click="router.push('/')" title="Back to Home" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
+      <BackButton />
       <h1 class="title m-0">Discover Programs</h1>
     </div>
 
@@ -274,21 +269,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.back-btn {
-  transition: all 0.2s ease;
-}
-
-.back-btn:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--primary-accent);
-  border-color: var(--primary-accent);
-  transform: translateX(-1px);
-}
-
-.back-btn:active {
-  transform: translateX(0);
-}
-
 .programs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
