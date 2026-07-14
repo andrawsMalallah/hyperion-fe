@@ -5,6 +5,7 @@ import { useExerciseStore } from './exercise';
 import { useWorkoutStore } from './workout';
 import { useHistoryStore } from './history';
 import { useDiscoverStore } from './discover';
+import { useProgressStore } from './progress';
 
 // Corrupt/partial localStorage must never crash store init (which would leave
 // the whole app unbootable). Fall back to null and clear the bad value.
@@ -62,6 +63,7 @@ export const useAuthStore = defineStore('auth', {
       useWorkoutStore().reset();
       useHistoryStore().reset();
       useDiscoverStore().reset();
+      useProgressStore().reset();
       this.clearAuthData();
     },
 

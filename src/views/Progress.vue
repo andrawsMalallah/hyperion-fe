@@ -1,13 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { useHistoryStore } from '../stores/history'
+import { useProgressStore } from '../stores/progress'
 import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
-import { e1rmHistory, weeklyVolume, epley1RM } from '../utils/stats'
 import { formatWeight } from '../utils/units'
 
-const historyStore = useHistoryStore()
+const progressStore = useProgressStore()
 const workoutStore = useWorkoutStore()
 
 const pageLoading = ref(true)
@@ -19,13 +18,10 @@ const unit = computed(() => workoutStore.weightUnit)
 const DATA_COLOR = '#7A9900'
 
 onMounted(async () => {
-  // Pull up to 5 pages so trends cover more than the last 30 sessions.
-  await historyStore.fetchHistory(false, false)
-  let guard = 0
-  while (historyStore.historyHasMore && !historyStore.loadFailed && guard < 4) {
-    await historyStore.fetchHistory(false, true)
-    guard++
-  }
+  // All trends/volume/PRs come from one server-side aggregate call now. Force a
+  // fresh fetch each visit so the page reflects the latest session immediately
+  // (a workout finished/edited/deleted just before opening Progress).
+  await progressStore.fetchStats(true)
   if (!selectedExerciseId.value && exerciseOptions.value.length > 0) {
     selectedExerciseId.value = exerciseOptions.value[0].id
   }
@@ -38,56 +34,21 @@ onMounted(async () => {
 
 onUnmounted(() => window.removeEventListener('resize', measure))
 
-const logs = computed(() => historyStore.workout_logs)
+// Any logged exercises means there's data to show.
+const hasData = computed(() => progressStore.exercises.length > 0)
 
-// Exercises present in history, most-logged first.
-const exerciseOptions = computed(() => {
-  const counts = new Map()
-  for (const log of logs.value) {
-    for (const s of log.sets || []) {
-      if (!s.exercise) continue
-      const entry = counts.get(s.exercise_id) || { id: s.exercise_id, name: s.exercise.name, n: 0 }
-      entry.n++
-      counts.set(s.exercise_id, entry)
-    }
-  }
-  return [...counts.values()].sort((a, b) => b.n - a.n)
-})
+// Exercises present in history, most-logged first (from the endpoint).
+const exerciseOptions = computed(() => progressStore.exercises)
 
 const selectedExerciseId = ref(null)
 
-// ---- Stat tiles
-const weekStats = computed(() => {
-  const monday = new Date()
-  monday.setHours(0, 0, 0, 0)
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
-  let sessions = 0
-  let volume = 0
-  for (const log of logs.value) {
-    if (new Date(log.date_timestamp) < monday) continue
-    sessions++
-    for (const s of log.sets || []) {
-      if ((s.set_type || 'working') !== 'warmup') volume += Number(s.weight) * Number(s.reps)
-    }
-  }
-  return { sessions, volume }
-})
+// ---- Stat tiles (server-computed)
+const weekStats = computed(() => progressStore.week)
 
-// ---- PR feed: sessions where an exercise's est. 1RM beat every prior session
-const recentPRs = computed(() => {
-  const prs = []
-  for (const opt of exerciseOptions.value) {
-    const points = e1rmHistory(logs.value, opt.id)
-    let best = 0
-    for (const p of points) {
-      if (best > 0 && p.e1rm > best) {
-        prs.push({ exercise: opt.name, date: p.date, weight: p.weight, reps: p.reps, e1rm: p.e1rm })
-      }
-      if (p.e1rm > best) best = p.e1rm
-    }
-  }
-  return prs.sort((a, b) => b.date - a.date).slice(0, 5)
-})
+// ---- PR feed: server-computed; parse dates for formatting.
+const recentPRs = computed(() =>
+  progressStore.recentPrs.map(pr => ({ ...pr, date: new Date(pr.date) }))
+)
 
 // ---- Chart geometry
 // viewWidth is the visible plotting area (the card's inner width). Each chart
@@ -112,8 +73,8 @@ const LINE_GAP = 64 // min horizontal px between trend points
 const BAR_SLOT = 56 // min horizontal px per weekly bar
 
 const trendPoints = computed(() => {
-  if (!selectedExerciseId.value) return []
-  return e1rmHistory(logs.value, selectedExerciseId.value)
+  const series = progressStore.e1rmByExercise[selectedExerciseId.value] || []
+  return series.map(p => ({ ...p, date: new Date(p.date) }))
 })
 
 const trendGeo = computed(() => {
@@ -140,7 +101,9 @@ const trendGeo = computed(() => {
   return { points: mapped, path, ticks, width: contentW }
 })
 
-const volumeWeeks = computed(() => weeklyVolume(logs.value, 8))
+const volumeWeeks = computed(() =>
+  progressStore.weeklyVolume.map(w => ({ weekStart: new Date(w.week_start), volume: w.volume }))
+)
 
 const barGeo = computed(() => {
   const weeks = volumeWeeks.value
@@ -247,7 +210,7 @@ const showTable = ref(false)
     </div>
 
     <!-- Empty -->
-    <div v-else-if="logs.length === 0" class="empty-state card py-40 text-center">
+    <div v-else-if="!hasData" class="empty-state card py-40 text-center">
       <p style="color: var(--text-secondary); margin: 0 0 16px 0;">Log a few workouts and your progress charts will appear here.</p>
       <PrimaryButton to="/" class="inline-flex no-underline px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;">
         Start Training
@@ -572,11 +535,22 @@ const showTable = ref(false)
 .exercise-select {
   width: 100%;
   max-width: 400px;
+  /* Drop the native dropdown arrow (which the browser insets with a large gap,
+     making it look shifted left) for a custom chevron pinned a controlled 12px
+     from the right edge — symmetric with the text's 12px on the left. */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   background-color: var(--bg-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23AAAAAA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
   color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 10px 12px;
+  /* Extra right padding reserves room for the chevron so long names don't run under it. */
+  padding: 10px 36px 10px 12px;
   font-size: 14px;
   font-weight: 600;
 }

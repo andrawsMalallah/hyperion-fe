@@ -719,6 +719,10 @@ body {
      then stretches it back to fill that text-width cell. */
   width: 0;
   min-width: 100%;
+  /* Inputs don't inherit font-family by default — without this the input renders
+     in the UA font (Arial) while the ::after sizer uses the page font, making the
+     sizer too narrow and clipping the text. Must match the sizer's font. */
+  font-family: inherit;
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);

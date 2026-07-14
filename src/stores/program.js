@@ -70,6 +70,26 @@ function dayExercisesPayload(d) {
   })
 }
 
+// The local "program meta" shape kept in user_programs (no days).
+function programMeta(apiProgram) {
+  return {
+    id: apiProgram.id,
+    name: apiProgram.name,
+    is_active: apiProgram.is_active,
+    is_public: apiProgram.is_public,
+    created_at: apiProgram.created_at
+  }
+}
+
+// Merge a day's exercise objects into the shared exercise store, deduped by id.
+function mergeDayExercises(exerciseStore, day) {
+  day.exercises.forEach(e => {
+    if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
+      exerciseStore.exercises.push(e)
+    }
+  })
+}
+
 export const useProgramStore = defineStore('program', () => {
   const user_programs = ref([])
   const program_days = ref([])
@@ -89,26 +109,15 @@ export const useProgramStore = defineStore('program', () => {
       const response = await api.get('/programs', { suppressErrorToast: true })
       const programsData = response.data.data
 
-      user_programs.value = programsData.map(s => ({
-        id: s.id,
-        name: s.name,
-        is_active: s.is_active,
-        is_public: s.is_public,
-        created_at: s.created_at
-      }))
-      
+      user_programs.value = programsData.map(programMeta)
+
       const exerciseStore = useExerciseStore()
       let allDays = []
       programsData.forEach(s => {
         fetchedprogramIds.value.add(String(s.id))
-        
-        s.days.forEach(d => {
-          d.exercises.forEach(e => {
-            if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
-              exerciseStore.exercises.push(e)
-            }
-          })
 
+        s.days.forEach(d => {
+          mergeDayExercises(exerciseStore, d)
           allDays.push(mapApiDay(d, s.id))
         })
       })
@@ -130,36 +139,7 @@ export const useProgramStore = defineStore('program', () => {
     loading.value = true
     try {
       const response = await api.get(`/programs/${programId}`)
-      const s = response.data.data
-      
-      const idx = user_programs.value.findIndex(item => String(item.id) === String(s.id))
-      const ProgramMeta = {
-        id: s.id,
-        name: s.name,
-        is_active: s.is_active,
-        is_public: s.is_public,
-        created_at: s.created_at
-      }
-      if (idx !== -1) {
-        user_programs.value[idx] = ProgramMeta
-      } else {
-        user_programs.value.push(ProgramMeta)
-      }
-      
-      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(s.id))
-      
-      const exerciseStore = useExerciseStore()
-      s.days.forEach(d => {
-        d.exercises.forEach(e => {
-          if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
-            exerciseStore.exercises.push(e)
-          }
-        })
-        
-        program_days.value.push(mapApiDay(d, s.id))
-      })
-      
-      fetchedprogramIds.value.add(idStr)
+      ingestProgram(response.data.data)
     } catch (e) {
       console.error(e)
     } finally {
@@ -173,36 +153,7 @@ export const useProgramStore = defineStore('program', () => {
     loading.value = true
     try {
       const response = await api.get(`/programs/by-day/${dayId}`, { suppressErrorToast: true })
-      const s = response.data.data
-      
-      const idx = user_programs.value.findIndex(item => String(item.id) === String(s.id))
-      const ProgramMeta = {
-        id: s.id,
-        name: s.name,
-        is_active: s.is_active,
-        is_public: s.is_public,
-        created_at: s.created_at
-      }
-      if (idx !== -1) {
-        user_programs.value[idx] = ProgramMeta
-      } else {
-        user_programs.value.push(ProgramMeta)
-      }
-      
-      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(s.id))
-      
-      const exerciseStore = useExerciseStore()
-      s.days.forEach(d => {
-        d.exercises.forEach(e => {
-          if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
-            exerciseStore.exercises.push(e)
-          }
-        })
-        
-        program_days.value.push(mapApiDay(d, s.id))
-      })
-      
-      fetchedprogramIds.value.add(String(s.id))
+      ingestProgram(response.data.data)
     } catch (e) {
       console.error(e)
       useToastStore().error('Could not load this workout day.')
@@ -268,22 +219,8 @@ export const useProgramStore = defineStore('program', () => {
     try {
       const response = await api.post('/programs', payload)
       const newProgram = response.data.data
-      
-      user_programs.value.push({
-        id: newProgram.id,
-        name: newProgram.name,
-        is_active: newProgram.is_active,
-        is_public: newProgram.is_public,
-        created_at: newProgram.created_at
-      })
 
-      fetchedprogramIds.value.add(String(newProgram.id))
-
-      if (newProgram.days) {
-        newProgram.days.forEach(d => {
-          program_days.value.push(mapApiDay(d, newProgram.id))
-        })
-      }
+      ingestProgram(newProgram)
 
       draftProgram.value = null
       return newProgram.id
@@ -364,26 +301,7 @@ export const useProgramStore = defineStore('program', () => {
 
     try {
       const response = await api.put(`/programs/${programId}`, payload)
-      const updatedProgram = response.data.data
-      
-      Program.name = updatedProgram.name
-      Program.is_active = updatedProgram.is_active
-      Program.is_public = updatedProgram.is_public
-      
-      program_days.value = program_days.value.filter(d => String(d.program_id) !== String(programId))
-      
-      const exerciseStore = useExerciseStore()
-      updatedProgram.days.forEach(d => {
-        d.exercises.forEach(e => {
-          if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
-            exerciseStore.exercises.push(e)
-          }
-        })
-
-        program_days.value.push(mapApiDay(d, updatedProgram.id))
-      })
-      
-      fetchedprogramIds.value.add(String(programId))
+      ingestProgram(response.data.data)
     } catch (e) {
       console.error(e)
       throw e
@@ -394,13 +312,7 @@ export const useProgramStore = defineStore('program', () => {
   // local state so it appears in the user's programs immediately, without
   // waiting for the list cache to revalidate.
   function ingestProgram(apiProgram) {
-    const meta = {
-      id: apiProgram.id,
-      name: apiProgram.name,
-      is_active: apiProgram.is_active,
-      is_public: apiProgram.is_public,
-      created_at: apiProgram.created_at
-    }
+    const meta = programMeta(apiProgram)
     const idx = user_programs.value.findIndex(item => String(item.id) === String(apiProgram.id))
     if (idx !== -1) user_programs.value[idx] = meta
     else user_programs.value.push(meta)
@@ -409,11 +321,7 @@ export const useProgramStore = defineStore('program', () => {
 
     const exerciseStore = useExerciseStore()
     ;(apiProgram.days || []).forEach(d => {
-      d.exercises.forEach(e => {
-        if (!exerciseStore.exercises.some(ex => ex.id === e.id)) {
-          exerciseStore.exercises.push(e)
-        }
-      })
+      mergeDayExercises(exerciseStore, d)
       program_days.value.push(mapApiDay(d, apiProgram.id))
     })
 
