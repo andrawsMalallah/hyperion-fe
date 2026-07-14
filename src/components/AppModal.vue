@@ -26,6 +26,10 @@ const props = defineProps({
     type: String,
     default: '400px'
   },
+  maxHeight: {
+    type: String,
+    default: '90vh'
+  },
   hideCancel: {
     type: Boolean,
     default: false
@@ -122,7 +126,7 @@ const onCancel = () => {
         aria-modal="true"
         :aria-labelledby="title ? titleId : undefined"
         tabindex="-1"
-        :style="{ maxWidth: maxWidth, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }"
+        :style="{ maxWidth: maxWidth, maxHeight: maxHeight, display: 'flex', flexDirection: 'column' }"
       >
 
         <!-- Header -->

@@ -90,6 +90,43 @@ const localDays = computed(() => {
     }))
 })
 
+// Rename a day. `day` comes from the localDays computed (a shallow copy), so we
+// must write day_name back onto the real draft entry, not the copy.
+const updateDayName = (day, name) => {
+  const d = draftDays.value.find(draft => draft.id === day.id)
+  if (d) {
+    d.day_name = name
+    isDirty.value = true
+  }
+}
+
+// Reorder whole days. display_order is what syncProgramDays/saveNewProgram
+// persist (both derive it from array position), so swap in the display-order
+// sequence, renumber, and reassign draftDays so array order == display order.
+const moveDayUp = (day) => {
+  const ordered = [...draftDays.value].sort((a, b) => a.display_order - b.display_order)
+  const i = ordered.findIndex(d => d.id === day.id)
+  if (i <= 0) return
+  const tmp = ordered[i - 1]
+  ordered[i - 1] = ordered[i]
+  ordered[i] = tmp
+  ordered.forEach((d, idx) => { d.display_order = idx + 1 })
+  draftDays.value = ordered
+  isDirty.value = true
+}
+
+const moveDayDown = (day) => {
+  const ordered = [...draftDays.value].sort((a, b) => a.display_order - b.display_order)
+  const i = ordered.findIndex(d => d.id === day.id)
+  if (i === -1 || i >= ordered.length - 1) return
+  const tmp = ordered[i + 1]
+  ordered[i + 1] = ordered[i]
+  ordered[i] = tmp
+  ordered.forEach((d, idx) => { d.display_order = idx + 1 })
+  draftDays.value = ordered
+  isDirty.value = true
+}
+
 // Up/Down reordering
 const moveUp = (day, index) => {
   if (index > 0) {
@@ -320,12 +357,30 @@ const getMuscleGroupColor = muscleGroupColor
         </div>
 
         <div class="builder-container">
-          <!-- Program Days Area -->
-          <TransitionGroup name="list-fade" tag="div" class="days-panel">
-            <div v-for="day in localDays" :key="day.id" class="card day-card">
+          <!-- Program Days Area. Own transition name ("day") so reordering whole
+               days is decoupled from the inner exercise list's list-fade. -->
+          <TransitionGroup name="day" tag="div" class="days-panel">
+            <div v-for="(day, dayIndex) in localDays" :key="day.id" class="card day-card">
               <div class="day-header">
-                <h2 class="subtitle m-0">{{ day.day_name }}</h2>
+                <input class="day-name-input" :value="day.day_name"
+                  @input="updateDayName(day, $event.target.value)"
+                  @keydown.enter.prevent="$event.target.blur()" maxlength="255"
+                  placeholder="Day name" aria-label="Day name" />
                 <div class="day-actions gap-8">
+                  <button class="btn-secondary day-action-btn" :disabled="dayIndex === 0"
+                    @click="moveDayUp(day)" title="Move Day Up" aria-label="Move day up">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="18 15 12 9 6 15"></polyline>
+                    </svg>
+                  </button>
+                  <button class="btn-secondary day-action-btn" :disabled="dayIndex === localDays.length - 1"
+                    @click="moveDayDown(day)" title="Move Day Down" aria-label="Move day down">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
                   <button class="btn-secondary day-action-btn" @click="openModal(day.id)" title="Add Exercise">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
                       stroke-linecap="round" stroke-linejoin="round">
@@ -533,6 +588,46 @@ const getMuscleGroupColor = muscleGroupColor
 .builder-footer {
   display: flex;
   flex-direction: column;
+}
+
+/* ===== Day reorder / enter / leave =======================================
+   The days TransitionGroup uses name="day" (its own, not the exercise
+   list's list-fade). On reorder Vue adds .day-move and FLIPs the cards;
+   this gives that a smooth, promoted transform transition. Enter/leave
+   cover adding and deleting a day. */
+.days-panel :deep(.day-move) {
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.days-panel :deep(.day-enter-active),
+.days-panel :deep(.day-leave-active) {
+  transition: all 0.32s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.days-panel :deep(.day-enter-from) {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.days-panel :deep(.day-leave-to) {
+  opacity: 0;
+  transform: translateY(-16px);
+}
+
+/* A leaving day must drop out of flow so the others FLIP into place
+   instead of jumping when it's removed. */
+.days-panel :deep(.day-leave-active) {
+  position: absolute;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .days-panel :deep(.day-move),
+  .days-panel :deep(.day-enter-active),
+  .days-panel :deep(.day-leave-active) {
+    transition: none;
+  }
 }
 
 /* ===== Exercise card =====================================================

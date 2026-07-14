@@ -210,10 +210,11 @@ onUnmounted(() => {
     </div>
 
     <!-- Detail Modal (Premium Overlay) -->
-    <AppModal 
-      :show="selectedProgram"
+    <AppModal
+      :show="!!selectedProgram"
       type="custom"
       maxWidth="500px"
+      maxHeight="75vh"
       @cancel="closeModal"
     >
       <template #header>

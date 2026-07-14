@@ -682,13 +682,41 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+}
+
+/* Inline-editable day name: reads as a title, uses only a bottom border
+   (an underline field) that brightens on hover and turns accent on focus.
+   Shrinks so the actions never wrap. */
+.day-name-input {
+  flex: 1;
+  min-width: 0;
+  margin-right: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 4px 0;
+  transition: border-color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .day-name-input:hover {
+    border-bottom-color: var(--border-color);
+  }
+}
+
+.day-name-input:focus {
+  outline: none;
+  border-bottom-color: var(--primary-accent);
 }
 
 .day-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .day-action-btn {
@@ -703,6 +731,11 @@ body {
   padding: 0;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.day-action-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 .delete-day-btn {
