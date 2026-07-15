@@ -89,13 +89,24 @@ const confirmLogout = async () => {
   router.push('/login')
 }
 
-watch(isAuthenticated, (newVal) => {
-  if (newVal) {
-    authStore.fetchUser()
-    const workoutStore = useWorkoutStore()
-    workoutStore.fetchSettings()
-    useSyncStore().flush()
+watch(isAuthenticated, async (newVal) => {
+  if (!newVal) return
+  // /user sits outside the email-verified gate, so fetch it first to learn the
+  // account's verification status (and refresh a stale cached user).
+  await authStore.fetchUser()
+  // Unverified accounts belong on the verify screen. A stale cached user (from
+  // before verification shipped) can slip past the initial router guard; once
+  // fetchUser reveals they're unverified, send them there explicitly and skip
+  // the gated background fetches (which would 409 and spam the console).
+  if (authStore.isUnverified) {
+    if (router.currentRoute.value.name !== 'VerifyEmail') {
+      router.push('/verify-email')
+    }
+    return
   }
+  const workoutStore = useWorkoutStore()
+  workoutStore.fetchSettings()
+  useSyncStore().flush()
 }, { immediate: true })
 </script>
 

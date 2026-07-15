@@ -31,6 +31,12 @@ export const useSyncStore = defineStore('sync', () => {
     if (flushing.value || queue.value.length === 0) return
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return
     if (!localStorage.getItem('auth_token')) return
+    // An unverified account is blocked from every data route (409), so draining
+    // would just fail and redirect. Hold the outbox until the email is verified.
+    try {
+      const storedUser = JSON.parse(localStorage.getItem('user') || 'null')
+      if (storedUser && storedUser.email_verified === false) return
+    } catch { /* corrupt user JSON — let the normal flow handle it */ }
 
     flushing.value = true
     const toast = useToastStore()
