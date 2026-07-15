@@ -91,6 +91,14 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    // Permanently deletes the account (re-confirmed with the current password),
+    // then tears down every store exactly like logout — the caller redirects to
+    // /login. The backend removes all of the user's data server-side.
+    async deleteAccount(payload) {
+      await api.delete('/user', { data: payload });
+      this.resetAllStores();
+    },
+
     async updateProfile(fields) {
       const response = await api.put('/user/profile', fields);
       this.user = response.data.data;

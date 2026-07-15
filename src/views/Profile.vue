@@ -97,6 +97,18 @@
       </button>
     </div>
 
+    <!-- Danger zone: delete account -->
+    <div class="card profile-card danger-card">
+      <div class="card-header">
+        <h2 class="subtitle m-0 danger-title">Delete Account</h2>
+        <p class="section-desc-top">Permanently delete your account and all your data — programs, workout history, and settings. This cannot be undone.</p>
+      </div>
+
+      <button class="btn-danger tap-target delete-account-btn" @click="openDeleteModal">
+        Delete Account
+      </button>
+    </div>
+
     <AppModal
       v-model:show="showLogoutAllModal"
       title="Log out all devices"
@@ -106,6 +118,36 @@
       cancel-text="Cancel"
       @confirm="confirmLogoutAll"
     />
+
+    <!-- Delete account confirmation: requires the current password -->
+    <AppModal
+      v-model:show="showDeleteModal"
+      title="Delete account"
+      type="custom"
+      max-width="420px"
+    >
+      <div class="flex-col" style="gap: 16px;">
+        <p class="delete-warning">
+          This permanently deletes your account and everything in it. Your programs,
+          workout history, and settings will be gone for good. This action cannot be undone.
+        </p>
+
+        <form @submit.prevent="confirmDelete" class="flex-col" style="gap: 8px;">
+          <label for="delete-password" style="font-weight: 600; font-size: 14px;">Enter your password to confirm</label>
+          <PasswordInput id="delete-password" v-model="deletePassword" autocomplete="current-password" />
+        </form>
+
+        <div class="delete-modal-actions">
+          <button type="button" class="btn-secondary tap-target" @click="showDeleteModal = false" :disabled="deleting">
+            Cancel
+          </button>
+          <button type="button" class="btn-danger tap-target" @click="confirmDelete" :disabled="deleting || !deletePassword">
+            <span v-if="deleting">Deleting…</span>
+            <span v-else>Delete Account</span>
+          </button>
+        </div>
+      </div>
+    </AppModal>
   </div>
 </template>
 
@@ -211,6 +253,30 @@ const confirmLogoutAll = async () => {
   }
 };
 
+// --- Delete account ---
+const showDeleteModal = ref(false);
+const deletePassword = ref('');
+const deleting = ref(false);
+
+function openDeleteModal() {
+  deletePassword.value = '';
+  showDeleteModal.value = true;
+}
+
+const confirmDelete = async () => {
+  if (!deletePassword.value || deleting.value) return;
+  deleting.value = true;
+  try {
+    await authStore.deleteAccount({ current_password: deletePassword.value });
+    toast.success('Your account has been deleted.');
+    router.push('/login');
+  } catch {
+    // A wrong password (422) or other errors are surfaced as toasts by the
+    // interceptor; keep the modal open so the user can retry.
+    deleting.value = false;
+  }
+};
+
 // Refresh from the server so created_at/email are correct for users whose
 // localStorage copy predates those fields being displayed anywhere.
 onMounted(async () => {
@@ -309,6 +375,45 @@ onMounted(async () => {
 
 .device-logout-all {
   width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Danger zone */
+.danger-card {
+  border-color: var(--danger);
+}
+
+.danger-title {
+  color: var(--danger);
+}
+
+.delete-account-btn {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Delete confirmation modal */
+.delete-warning {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.delete-modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.delete-modal-actions button {
+  flex: 1;
   min-height: 44px;
   display: flex;
   align-items: center;
