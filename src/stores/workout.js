@@ -40,6 +40,9 @@ export const useWorkoutStore = defineStore('workout', () => {
   const restTimeLeft = ref(0)
   const isResting = ref(false)
   const timerEnabled = ref(true)
+  // Opt-in browser notification when the rest countdown ends while the tab is
+  // backgrounded / the phone is locked (the beep + vibrate only reach a live tab).
+  const restNotifications = ref(false)
   const defaultRestTime = ref(90)
   const weightUnit = ref('kg')
   let timerInterval = null
@@ -305,6 +308,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200])
     }
+    // When the tab is hidden (backgrounded / phone locked) the beep below can't
+    // be heard and there's no visible countdown — surface a browser notification
+    // instead, if the user opted in and granted permission. Kept to the hidden
+    // case so a live, foregrounded tab isn't double-notified.
+    showRestNotification()
     try {
       if (!audioCtx) return
       const now = audioCtx.currentTime
@@ -326,6 +334,38 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
   }
 
+  // Best-effort "rest over" browser notification for a backgrounded tab. Guarded
+  // on the opt-in setting + granted permission + a hidden document. Prefers the
+  // service worker's showNotification (reliable on mobile), falling back to a
+  // page Notification. Notification Triggers aren't broadly supported, so this
+  // reaches a backgrounded tab but not one the OS has fully killed.
+  function showRestNotification() {
+    try {
+      if (!restNotifications.value) return
+      if (typeof document !== 'undefined' && !document.hidden) return
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+
+      const title = 'Rest over'
+      const options = {
+        body: 'Time for your next set.',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: 'hyperion-rest-timer', // collapse repeats into one
+        renotify: true,
+      }
+
+      if (navigator.serviceWorker?.ready) {
+        navigator.serviceWorker.ready
+          .then(reg => reg.showNotification(title, options))
+          .catch(() => new Notification(title, options))
+      } else {
+        new Notification(title, options)
+      }
+    } catch (e) {
+      // Notifications are best-effort; the beep/vibrate already fired.
+    }
+  }
+
   function removeSet(setId) {
     activeWorkoutSets.value = activeWorkoutSets.value.filter(s => s.id !== setId)
   }
@@ -338,10 +378,12 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function applyServerSettings(s) {
     timerEnabled.value = !!s.timer_enabled
+    restNotifications.value = !!s.rest_notifications
     defaultRestTime.value = parseInt(s.default_rest_time)
     weightUnit.value = s.weight_unit || 'kg'
     serverSettings = {
       timer_enabled: !!s.timer_enabled,
+      rest_notifications: !!s.rest_notifications,
       default_rest_time: parseInt(s.default_rest_time),
       weight_unit: s.weight_unit || 'kg'
     }
@@ -424,6 +466,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     stopRestTimer,
     removeSet,
     timerEnabled,
+    restNotifications,
     defaultRestTime,
     weightUnit,
     fetchSettings,
@@ -432,6 +475,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 }, {
   persist: {
-    pick: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'restEndsAt', 'timerEnabled', 'defaultRestTime', 'weightUnit']
+    pick: ['activeWorkoutDayId', 'activeWorkoutSets', 'activeWorkoutStartTime', 'restEndsAt', 'timerEnabled', 'restNotifications', 'defaultRestTime', 'weightUnit']
   }
 })

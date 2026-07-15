@@ -1,8 +1,10 @@
 <script setup>
 import { watch } from 'vue'
 import { useWorkoutStore } from '../stores/workout'
+import { useToastStore } from '../stores/toast'
 
 const workoutStore = useWorkoutStore()
+const toast = useToastStore()
 
 watch(() => workoutStore.timerEnabled, (val) => {
   workoutStore.updateSettings({ timer_enabled: val })
@@ -15,6 +17,39 @@ watch(() => workoutStore.defaultRestTime, (val) => {
 watch(() => workoutStore.weightUnit, (val) => {
   workoutStore.updateSettings({ weight_unit: val })
 })
+
+// Enabling alerts requires notification permission, which can be denied — so
+// this is handled explicitly (not a plain v-model + watch) so a failed/denied
+// request reverts the toggle instead of persisting an on-state that never fires.
+async function toggleRestNotifications(event) {
+  const wantsOn = event.target.checked
+
+  if (!wantsOn) {
+    workoutStore.restNotifications = false
+    workoutStore.updateSettings({ rest_notifications: false })
+    return
+  }
+
+  if (typeof Notification === 'undefined') {
+    toast.error('This browser does not support notifications.')
+    workoutStore.restNotifications = false
+    return
+  }
+
+  let permission = Notification.permission
+  if (permission === 'default') {
+    permission = await Notification.requestPermission()
+  }
+
+  if (permission === 'granted') {
+    workoutStore.restNotifications = true
+    workoutStore.updateSettings({ rest_notifications: true })
+  } else {
+    // Denied or previously blocked — keep it off and point the user to the fix.
+    workoutStore.restNotifications = false
+    toast.error('Notifications are blocked. Enable them in your browser settings to use alerts.')
+  }
+}
 </script>
 
 <template>
@@ -55,7 +90,33 @@ watch(() => workoutStore.weightUnit, (val) => {
           </div>
         </div>
 
-        <!-- Row 2: Rest Time (Select / Picker) -->
+        <!-- Row 2: Rest Timer Alerts Toggle -->
+        <div class="setting-item-row" :class="{ 'disabled': !workoutStore.timerEnabled }">
+          <div class="setting-icon-box">
+            <!-- Bell Icon -->
+            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </div>
+          <div class="setting-details">
+            <span class="setting-title">Rest Timer Alerts</span>
+            <span class="setting-sub">Get a notification when your rest ends, even while your phone is locked</span>
+          </div>
+          <div class="setting-control">
+            <label class="premium-switch">
+              <input
+                type="checkbox"
+                :checked="workoutStore.restNotifications"
+                :disabled="!workoutStore.timerEnabled"
+                @change="toggleRestNotifications"
+              />
+              <span class="premium-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Row 3: Rest Time (Select / Picker) -->
         <div class="setting-item-row" :class="{ 'disabled': !workoutStore.timerEnabled }">
           <div class="setting-icon-box">
             <!-- Hourglass/Timer Icon -->
@@ -93,7 +154,7 @@ watch(() => workoutStore.weightUnit, (val) => {
           </div>
         </div>
 
-        <!-- Row 3: Weight Unit (Segmented Picker) -->
+        <!-- Row 4: Weight Unit (Segmented Picker) -->
         <div class="setting-item-row">
           <div class="setting-icon-box">
             <!-- Dumbbell SVG Icon -->
