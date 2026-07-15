@@ -22,6 +22,7 @@ const Contribute = () => import('../views/Contribute.vue')
 const Register = () => import('../views/auth/Register.vue')
 const ForgotPassword = () => import('../views/auth/ForgotPassword.vue')
 const ResetPassword = () => import('../views/auth/ResetPassword.vue')
+const VerifyEmail = () => import('../views/auth/VerifyEmail.vue')
 
 const routes = [
   {
@@ -47,6 +48,14 @@ const routes = [
     name: 'ResetPassword',
     component: ResetPassword,
     meta: { guestOnly: true }
+  },
+  {
+    // Two modes: the emailed link carries :id/:hash (verify callback); with no
+    // params it's the "check your inbox / resend" pending screen. Reachable both
+    // logged-out (link opened in a fresh browser) and logged-in (post-register).
+    path: '/verify-email/:id?/:hash?',
+    name: 'VerifyEmail',
+    component: VerifyEmail
   },
   {
     path: '/',
@@ -119,11 +128,21 @@ const router = createRouter({
 router.beforeEach((to, from) => {
   const authStore = useAuthStore()
   const isAuthenticated = authStore.isAuthenticated
+  const isUnverified = authStore.isUnverified
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     return '/login'
-  } else if (to.meta.guestOnly && isAuthenticated) {
-    return '/'
+  }
+
+  if (to.meta.guestOnly && isAuthenticated) {
+    // A logged-in-but-unverified user belongs on the verify screen, not home.
+    return isUnverified ? '/verify-email' : '/'
+  }
+
+  // Hard requirement: until the email is verified, confine the user to the
+  // verify screen (both its pending and callback modes share this route name).
+  if (isUnverified && to.name !== 'VerifyEmail') {
+    return '/verify-email'
   }
 })
 

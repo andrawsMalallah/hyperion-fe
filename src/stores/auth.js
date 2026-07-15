@@ -26,6 +26,10 @@ export const useAuthStore = defineStore('auth', {
   
   getters: {
     isAuthenticated: (state) => !!state.token,
+    // Unverified only when the backend explicitly says so. A cached user from
+    // before this feature shipped has no flag — treat that as verified and let
+    // the API's 409 gate correct it, rather than locking the user out here.
+    isUnverified: (state) => !!state.token && state.user?.email_verified === false,
   },
   
   actions: {
@@ -114,6 +118,27 @@ export const useAuthStore = defineStore('auth', {
       } catch (e) {
         this.clearAuthData();
       }
+    },
+
+    // Re-send the verification email to the logged-in (unverified) user.
+    async resendVerification() {
+      return api.post('/email/verification-notification');
+    },
+
+    // Confirm a verification link. `query` is the raw '?expires=…&signature=…'
+    // string from the emailed URL — forwarded verbatim so the backend's signed
+    // check sees the exact query it signed. Suppresses the interceptor toast so
+    // the verify page can show its own success/expired state.
+    async verifyEmail(id, hash, query) {
+      const response = await api.get(`/email/verify/${id}/${hash}${query}`, {
+        suppressErrorToast: true,
+      });
+      // If a session is active, refresh the user so email_verified flips true
+      // and the router guard stops confining them to the verify screen.
+      if (this.token) {
+        await this.fetchUser();
+      }
+      return response;
     }
   }
 });

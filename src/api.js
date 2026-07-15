@@ -64,6 +64,20 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+
+    // The account is authenticated but its email isn't verified. Route to the
+    // verify screen (the redirect is the feedback) instead of toasting; the
+    // verify page's own calls opt out via suppressErrorToast anyway.
+    if (
+      error.response?.status === 409 &&
+      error.response.data?.code === 'email_unverified'
+    ) {
+      if (!window.location.pathname.startsWith('/verify-email')) {
+        window.location.href = '/verify-email';
+      }
+      return Promise.reject(error);
+    }
+
     toastApiError(error);
     return Promise.reject(error);
   }
