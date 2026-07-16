@@ -122,6 +122,25 @@ function editProgram(programId) {
   router.push(`/builder/${programId}`)
 }
 
+// Program file import. The store handles parsing, the request and the toasts;
+// this only drives the input and the button's busy state.
+const importInput = ref(null)
+const importing = ref(false)
+
+async function handleImportFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  importing.value = true
+  try {
+    await programStore.importProgram(file)
+  } finally {
+    importing.value = false
+    // Clear the input so re-picking the same file fires change again.
+    if (importInput.value) importInput.value.value = ''
+  }
+}
+
 // Transition hooks to animate element height dynamically
 function beforeEnter(el) {
   el.style.height = '0'
@@ -282,12 +301,26 @@ onMounted(() => {
         <div v-if="activeProgram" class="active-Program-showcase card">
           <div class="showcase-header">
             <h3 class="showcase-title">{{ activeProgram.name }}</h3>
-            <button class="btn-secondary tap-target edit-shortcut-btn" @click="editProgram(activeProgram.id)" title="Edit Program">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            </button>
+            <div class="showcase-header-actions">
+              <button
+                class="btn-secondary tap-target edit-shortcut-btn"
+                @click="programStore.exportProgram(activeProgram.id)"
+                title="Export Program"
+                aria-label="Export program to a file"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </button>
+              <button class="btn-secondary tap-target edit-shortcut-btn" @click="editProgram(activeProgram.id)" title="Edit Program" aria-label="Edit program">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div class="showcase-days-list mt-16">
@@ -359,8 +392,9 @@ onMounted(() => {
                 </div>
                 
                 <div class="flex-row gap-12 mt-16">
-                  <PrimaryButton class="px-16 h-36" style="font-size: 13px;" @click="makeActive(Program.id)">Make Active</PrimaryButton>
-                  <button class="btn-secondary tap-target px-16 h-36" style="font-size: 13px;" @click="editProgram(Program.id)">Edit</button>
+                  <PrimaryButton class="px-16 h-36 program-card-btn" @click="makeActive(Program.id)">Make Active</PrimaryButton>
+                  <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="editProgram(Program.id)">Edit</button>
+                  <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="programStore.exportProgram(Program.id)">Export</button>
                 </div>
               </div>
             </Transition>
@@ -398,6 +432,32 @@ onMounted(() => {
             </div>
           </div>
         </router-link>
+
+        <!-- Quick Action: Import a program file. The input is visually hidden
+             but focusable, so the whole card acts as its label. -->
+        <label class="card create-Program-card no-underline import-Program-card" :class="{ 'is-importing': importing }">
+          <div class="create-card-content">
+            <div class="create-icon-circle">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <div class="create-text">
+              <span class="create-title-text">{{ importing ? 'Importing…' : 'Import Program' }}</span>
+              <span class="create-desc-text">Load a program from a .json file</span>
+            </div>
+          </div>
+          <input
+            ref="importInput"
+            class="visually-hidden"
+            type="file"
+            accept="application/json,.json"
+            :disabled="importing"
+            @change="handleImportFile"
+          />
+        </label>
       </div>
     </div>
 
@@ -641,6 +701,36 @@ onMounted(() => {
   font-weight: 700;
   margin: 0;
   color: var(--primary-accent);
+}
+
+.showcase-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Equal-width actions on the inactive program cards (Make Active / Edit /
+   Export) so three buttons still fit a narrow phone. */
+.program-card-btn {
+  flex: 1;
+  font-size: 13px;
+}
+
+/* The file input inside is visually hidden, so the label itself is the target. */
+.import-Program-card {
+  cursor: pointer;
+  display: block;
+}
+
+.import-Program-card.is-importing {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Keyboard focus lands on the hidden input — surface it on the card. */
+.import-Program-card:focus-within {
+  outline: 2px solid var(--primary-accent);
+  outline-offset: 2px;
 }
 
 .edit-shortcut-btn {

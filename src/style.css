@@ -1444,6 +1444,20 @@ body.modal-open {
   text-decoration: none;
 }
 
+/* Hides an element visually while keeping it focusable and readable by screen
+   readers — for inputs wrapped in their own styled label (e.g. file pickers). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .text-accent {
   color: var(--primary-accent);
 }

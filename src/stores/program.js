@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import api from '../api'
 import { useExerciseStore } from './exercise'
 import { useToastStore } from './toast'
+import { buildProgramFile, downloadProgramFile, programFileName, parseProgramFile } from '../utils/programFile'
 
 export const FAMOUS_PROGRAMS = [
   {
@@ -308,6 +309,56 @@ export const useProgramStore = defineStore('program', () => {
     }
   }
 
+  // Download one of the user's programs as a portable file. Built from local
+  // state — no request — so this works offline. Exercise names come from the
+  // exercise store, which fetchPrograms already populates for every day.
+  function exportProgram(programId) {
+    const program = user_programs.value.find(p => String(p.id) === String(programId))
+    if (!program) return
+
+    const days = program_days.value
+      .filter(d => String(d.program_id) === String(programId))
+      .sort((a, b) => a.display_order - b.display_order)
+
+    const exerciseStore = useExerciseStore()
+    const contents = buildProgramFile(program, days, id =>
+      exerciseStore.exercises.find(e => String(e.id) === String(id))
+    )
+
+    downloadProgramFile(contents, programFileName(program.name))
+    useToastStore().success('Program exported.')
+  }
+
+  // Create a program from a file the user picked. The server resolves exercise
+  // names against the catalog and rejects anything it can't match, so a bad file
+  // surfaces as a validation message rather than a half-built program.
+  async function importProgram(file) {
+    const toast = useToastStore()
+    let payload
+    try {
+      payload = parseProgramFile(await file.text())
+    } catch (e) {
+      toast.error(e.message)
+      return null
+    }
+
+    try {
+      const response = await api.post('/programs/import', payload, { suppressErrorToast: true })
+      const imported = response.data.data
+      ingestProgram(imported)
+      toast.success(`"${imported.name}" imported.`)
+      return imported
+    } catch (e) {
+      console.error(e)
+      const errors = e.response?.data?.errors
+      // Surface the server's specific complaint (unknown exercises, bad
+      // version, …) instead of a generic failure.
+      const message = errors ? Object.values(errors).flat()[0] : null
+      toast.error(message || 'Could not import that program file.')
+      return null
+    }
+  }
+
   // Insert a program returned fresh from the API (e.g. a Discover clone) into
   // local state so it appears in the user's programs immediately, without
   // waiting for the list cache to revalidate.
@@ -356,6 +407,8 @@ export const useProgramStore = defineStore('program', () => {
     updateDayExercises,
     renameProgram,
     syncProgramDays,
+    exportProgram,
+    importProgram,
     ingestProgram,
     reset
   }
