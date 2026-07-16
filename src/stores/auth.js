@@ -7,6 +7,7 @@ import { useHistoryStore } from './history';
 import { useDiscoverStore } from './discover';
 import { useProgressStore } from './progress';
 import { useAdminStore } from './admin';
+import { setSentryUser, clearSentryUser } from '../sentry';
 
 // Corrupt/partial localStorage must never crash store init (which would leave
 // the whole app unbootable). Fall back to null and clear the bad value.
@@ -42,13 +43,15 @@ export const useAuthStore = defineStore('auth', {
       this.token = token;
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('auth_token', token);
+      setSentryUser(user);
     },
-    
+
     clearAuthData() {
       this.user = null;
       this.token = null;
       localStorage.removeItem('user');
       localStorage.removeItem('auth_token');
+      clearSentryUser();
     },
 
     async register(userData) {
