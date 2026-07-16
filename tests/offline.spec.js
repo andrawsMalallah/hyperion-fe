@@ -1,35 +1,11 @@
-import { test, expect } from '@playwright/test'
-
 // Drives the offline-sync path: finish a workout with the network down, prove
 // it's queued locally (not lost), then reconnect and prove it uploads. Needs
-// the local API on :8000 with a seeded catalog (see the throwaway harness).
-const API = 'http://localhost:8000/api'
+// the local API on :8000 with a seeded catalog (playwright.config.js boots it).
+import { test, expect, api, finishWorkout } from './support/auth.js'
 
-async function register(page) {
-  const email = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`
-  await page.goto('/register')
-  await page.fill('#name', 'Offline User')
-  await page.fill('#email', email)
-  await page.fill('#password', 'offline-pass-123')
-  await page.fill('#password_confirmation', 'offline-pass-123')
-  await page.click('button[type=submit]')
-  await page.waitForURL('**/')
-  return page.evaluate(() => localStorage.getItem('auth_token'))
-}
-
-async function api(request, token, method, path, data) {
-  const res = await request.fetch(API + path, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    data
-  })
-  expect(res.ok(), `${method} ${path} -> ${res.status()}`).toBeTruthy()
-  return res.json()
-}
-
-test('a workout finished offline queues locally and syncs on reconnect', async ({ page, context, request }) => {
+test('a workout finished offline queues locally and syncs on reconnect', async ({ page, context, request, authToken }) => {
   test.setTimeout(60000)
-  const token = await register(page)
+  const token = authToken
 
   const exercises = (await api(request, token, 'GET', '/exercises?search=press')).data.slice(0, 1)
   await api(request, token, 'POST', '/programs', {
@@ -54,10 +30,9 @@ test('a workout finished offline queues locally and syncs on reconnect', async (
 
   // Pull the plug, then finish the workout.
   await context.setOffline(true)
-  await page.click('text=Save Workout')
+  await finishWorkout(page)
 
   // Local-first: back to Home, nothing lost, a pending-sync banner appears.
-  await page.waitForURL('**/')
   await expect(page.locator('.sync-banner')).toBeVisible()
   await expect(page.locator('.sync-banner')).toContainText('1 workout')
 

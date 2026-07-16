@@ -1,50 +1,6 @@
-import { test as base, expect } from '@playwright/test'
-
 // Requires the Laravel API on http://localhost:8000 with a seeded exercise
-// catalog and a personal-access Passport client (see backend README/setup).
-const API = 'http://localhost:8000/api'
-
-async function registerViaUi(page) {
-  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`
-  await page.goto('/register')
-  await page.fill('#name', 'E2E User')
-  await page.fill('#email', email)
-  await page.fill('#password', 'e2e-password-123')
-  await page.fill('#password_confirmation', 'e2e-password-123')
-  await page.click('button[type=submit]')
-  await page.waitForURL('**/')
-  await expect(page.getByText('Hello,')).toBeVisible()
-  return page.evaluate(() => localStorage.getItem('auth_token'))
-}
-
-// Registration is rate-limited, so each worker registers once (through the
-// real UI) and later tests in the worker reuse the stored session.
-const session = {}
-
-const test = base.extend({
-  authToken: async ({ page }, use) => {
-    if (!session.token) {
-      session.token = await registerViaUi(page)
-      session.user = await page.evaluate(() => localStorage.getItem('user'))
-    } else {
-      await page.addInitScript(([token, user]) => {
-        localStorage.setItem('auth_token', token)
-        if (user) localStorage.setItem('user', user)
-      }, [session.token, session.user])
-    }
-    await use(session.token)
-  }
-})
-
-async function api(request, token, method, path, data) {
-  const res = await request.fetch(API + path, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    data
-  })
-  expect(res.ok(), `${method} ${path} -> ${res.status()}`).toBeTruthy()
-  return res.json()
-}
+// catalog and a personal-access Passport client (playwright.config.js boots it).
+import { test, expect, api, finishWorkout } from './support/auth.js'
 
 test('log a prescribed workout end-to-end', async ({ page, request, authToken }) => {
   const token = authToken
@@ -89,8 +45,7 @@ test('log a prescribed workout end-to-end', async ({ page, request, authToken })
   await page.getByLabel('Set 2 reps').fill('9')
   await page.locator('button[title="Save Set"]').first().click()
   await page.click('.rest-timer-overlay >> text=Skip')
-  await page.click('text=Save Workout')
-  await page.waitForURL('**/')
+  await finishWorkout(page)
 
   // The session shows up in History with both sets.
   await page.goto('/history')

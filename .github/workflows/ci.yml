@@ -3,6 +3,11 @@ name: CI
 # Verifies the production build compiles on every push to main and on PRs.
 # `npm run build` runs `vite build` in production mode, so it uses
 # .env.production (the live API URL) — the same output that ships in dist/.
+#
+# The e2e job runs the Playwright suite against a real API. It lives here rather
+# than in the backend repo because the specs do — and it exists because without
+# it the suite rots silently: all 4 specs were broken from Session 18 to 24 and
+# nothing noticed.
 
 on:
   push:
@@ -33,3 +38,74 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+
+      # The suite drives the real API, so the backend repo is checked out
+      # alongside it. hyperion-be is public, so the default token reads it — no
+      # secret needed. (If it ever goes private, this needs a PAT with repo read
+      # access passed as `token:`.)
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: andrawsMalallah/hyperion-be
+          ref: main
+          path: backend
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, curl, xml, ctype, bcmath, sqlite3, pdo_sqlite, openssl, tokenizer, fileinfo
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          composer install --no-interaction --prefer-dist --no-progress
+          php artisan key:generate
+
+      # migrate --seed also provisions the Passport personal-access client and
+      # the exercise catalog the specs pick from (see DatabaseSeeder).
+      - name: Prepare database and Passport keys
+        working-directory: backend
+        run: |
+          touch database/database.sqlite
+          php artisan passport:keys --force
+          php artisan migrate --seed --force
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Both projects (chromium + mobile-chrome/Pixel 5) run on Chromium.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.js boots both servers itself; it only needs to know
+      # where PHP and the backend are (the defaults are Herd/Windows paths).
+      - name: Run Playwright suite
+        env:
+          HYPERION_PHP: php
+          HYPERION_BE: ${{ github.workspace }}/backend
+        run: npx playwright test
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
