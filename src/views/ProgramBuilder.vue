@@ -8,6 +8,20 @@ import ExerciseSelectionModal from '../components/ExerciseSelectionModal.vue'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { muscleGroupColor } from '../utils/muscleColors'
+import {
+  TYPE_OPTIONS,
+  GROUP_SIZES,
+  SUPERSET,
+  isGroupType,
+  isTagType,
+  typeLabel,
+  typeOf,
+  groupKeyOf,
+  groupMembers,
+  nextGroupKey,
+  groupLetter,
+  validateDayGroups
+} from '../utils/grouping'
 
 const router = useRouter()
 const route = useRoute()
@@ -225,6 +239,137 @@ function rxChips(day, exId) {
   }
 }
 
+// Exercise type (drop set / pyramid set / superset / giant set) ----------------
+// The type lives on the prescription. localDays entries share their
+// `prescriptions` object with the draft by reference, so reads can use either —
+// writes go through the draft so a brand-new prescription lands on real state.
+
+function draftDay(day) {
+  return draftDays.value.find(draft => draft.id === day.id)
+}
+
+function ensureRx(d, exId) {
+  if (!d.prescriptions) d.prescriptions = {}
+  if (!d.prescriptions[exId]) d.prescriptions[exId] = {}
+  return d.prescriptions[exId]
+}
+
+function clearType(d, exId) {
+  const rx = d.prescriptions?.[exId]
+  if (!rx) return
+  delete rx.group_type
+  delete rx.group_key
+}
+
+function setExerciseType(day, exId, type) {
+  const d = draftDay(day)
+  if (!d) return
+
+  const previousType = typeOf(d, exId)
+  const previousKey = groupKeyOf(d, exId)
+  if (type === previousType) return
+
+  // Superset -> giant set (or back) keeps the group together and just retypes
+  // every member, rather than making the user rebuild it.
+  if (isGroupType(previousType) && isGroupType(type)) {
+    groupMembers(d, previousKey).forEach(id => { ensureRx(d, id).group_type = type })
+    isDirty.value = true
+    return
+  }
+
+  // Leaving a grouping type dissolves the group: the other members would
+  // otherwise be left in a group too small to save.
+  if (isGroupType(previousType)) {
+    groupMembers(d, previousKey).forEach(id => clearType(d, id))
+  }
+
+  if (!type) {
+    clearType(d, exId)
+    isDirty.value = true
+    return
+  }
+
+  const rx = ensureRx(d, exId)
+  rx.group_type = type
+  if (isGroupType(type)) rx.group_key = nextGroupKey(d)
+  else delete rx.group_key
+  isDirty.value = true
+}
+
+// The group is edited on its first member, so the checkbox list appears once
+// rather than on every card in the group.
+function isGroupAnchor(day, exId) {
+  const key = groupKeyOf(day, exId)
+  if (key === null || !isGroupType(typeOf(day, exId))) return false
+  return groupMembers(day, key)[0] === exId
+}
+
+function otherExercises(day, exId) {
+  return day.exerciseObjects.filter(e => e.id !== exId)
+}
+
+function isInGroupWith(day, anchorId, otherId) {
+  const key = groupKeyOf(day, anchorId)
+  return key !== null && groupKeyOf(day, otherId) === key
+}
+
+function toggleGroupMember(day, anchorId, otherId) {
+  const d = draftDay(day)
+  if (!d) return
+  const key = groupKeyOf(d, anchorId)
+  const type = typeOf(d, anchorId)
+  if (key === null || !isGroupType(type)) return
+
+  if (groupKeyOf(d, otherId) === key) {
+    clearType(d, otherId)
+  } else {
+    const rx = ensureRx(d, otherId)
+    rx.group_type = type
+    rx.group_key = key
+  }
+  isDirty.value = true
+}
+
+// Live feedback under the checkbox list, so a group that's the wrong size is
+// obvious while building it instead of on save.
+function groupStatus(day, exId) {
+  const type = typeOf(day, exId)
+  const count = groupMembers(day, groupKeyOf(day, exId)).length
+  const { min, max } = GROUP_SIZES[type] || {}
+  if (!min) return null
+
+  if (count < min) {
+    const needed = min - count
+    return {
+      ok: false,
+      text: type === SUPERSET
+        ? 'Pick 1 more exercise — a superset joins exactly 2.'
+        : `Pick ${needed} more — a giant set joins at least 3.`
+    }
+  }
+  if (max !== null && max !== undefined && count > max) {
+    return { ok: false, text: 'A superset joins exactly 2. Use a giant set for 3 or more.' }
+  }
+  return { ok: true, text: `${count} exercises joined — rest starts after the last one.` }
+}
+
+// Whether the targets strip has anything to show — a bare type counts, so a
+// drop set with no numbers still reads as configured rather than empty.
+function hasAnyRx(day, exId) {
+  return !!(rxSummary(day, exId) || typeOf(day, exId))
+}
+
+function groupBadge(day, exId) {
+  const type = typeOf(day, exId)
+  if (!isGroupType(type)) return ''
+  return `${typeLabel(type)} ${groupLetter(day, groupKeyOf(day, exId))}`.trim()
+}
+
+function anchorNameFor(day, exId) {
+  const anchorId = groupMembers(day, groupKeyOf(day, exId))[0]
+  return day.exerciseObjects.find(e => e.id === anchorId)?.name || 'the first exercise'
+}
+
 // Dialog States
 const showAddDayModal = ref(false)
 const showDeleteDayModal = ref(false)
@@ -278,6 +423,16 @@ const handleDeleteDayConfirm = () => {
 
 const saveProgram = async () => {
   if (targetProgram.value) {
+    // Group sizes are enforced server-side too; checking here turns a 422 into
+    // a message that names the day at fault.
+    for (const d of draftDays.value) {
+      const groupError = validateDayGroups(d)
+      if (groupError) {
+        toast.error(`${d.day_name}: ${groupError}`)
+        return
+      }
+    }
+
     isSaving.value = true
     try {
       if (route.params.programId === 'new') {
@@ -420,6 +575,10 @@ const getMuscleGroupColor = muscleGroupColor
                       </span>
                     </div>
 
+                    <span class="ex-group-badge" v-if="groupBadge(day, element.id)">
+                      {{ groupBadge(day, element.id) }}
+                    </span>
+
                     <div class="ex-reorder">
                       <button class="ex-move" :disabled="index === 0" @click="moveUp(day, index)" title="Move Up"
                         aria-label="Move up">
@@ -449,7 +608,13 @@ const getMuscleGroupColor = muscleGroupColor
 
                   <!-- Targets strip: chips when set, or an "add targets" prompt -->
                   <div class="ex-targets">
-                    <template v-if="rxSummary(day, element.id)">
+                    <template v-if="hasAnyRx(day, element.id)">
+                      <!-- Grouping types are already named by the header badge,
+                           so only the tag types need a chip here. -->
+                      <span class="target-chip" v-if="isTagType(typeOf(day, element.id))">
+                        <span class="chip-val">{{ typeLabel(typeOf(day, element.id)) }}</span>
+                        <span class="chip-key">type</span>
+                      </span>
                       <span class="target-chip" v-if="rxChips(day, element.id).setsReps">
                         <span class="chip-val">{{ rxChips(day, element.id).setsReps }}</span>
                         <span class="chip-key">sets × reps</span>
@@ -523,6 +688,51 @@ const getMuscleGroupColor = muscleGroupColor
                             v-model="day.prescriptions[element.id].notes" @input="isDirty = true"
                             placeholder="Coaching cue — e.g. pause 1s at the bottom, elbows tucked"></textarea>
                         </label>
+
+                        <!-- How the exercise is performed. Drop/pyramid are tags on
+                             this exercise alone; superset/giant join it to others,
+                             so picking one reveals the member list below. -->
+                        <label class="rx-field rx-field-type">
+                          <span>Type</span>
+                          <select :value="typeOf(day, element.id) || ''"
+                            @change="setExerciseType(day, element.id, $event.target.value || null)">
+                            <option value="">None</option>
+                            <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
+                              {{ opt.label }}
+                            </option>
+                          </select>
+                        </label>
+
+                        <div class="rx-group" v-if="isGroupType(typeOf(day, element.id))">
+                          <!-- The group is edited on its first exercise only, so the
+                               list appears once instead of on every member. -->
+                          <template v-if="isGroupAnchor(day, element.id)">
+                            <span class="rx-group-title">
+                              Performed with — pick
+                              {{ typeOf(day, element.id) === SUPERSET ? '1 other exercise' : '2 or more others' }}
+                            </span>
+                            <div class="rx-group-options" v-if="otherExercises(day, element.id).length">
+                              <label v-for="other in otherExercises(day, element.id)" :key="other.id"
+                                class="rx-group-option">
+                                <input type="checkbox" :checked="isInGroupWith(day, element.id, other.id)"
+                                  @change="toggleGroupMember(day, element.id, other.id)" />
+                                <span>{{ other.name }}</span>
+                              </label>
+                            </div>
+                            <p class="rx-group-hint" v-else>
+                              Add another exercise to this day first.
+                            </p>
+                            <p class="rx-group-hint"
+                              :class="{ 'rx-group-hint--warn': groupStatus(day, element.id) && !groupStatus(day, element.id).ok }"
+                              v-if="groupStatus(day, element.id)">
+                              {{ groupStatus(day, element.id).text }}
+                            </p>
+                          </template>
+                          <p class="rx-group-hint" v-else>
+                            Part of {{ groupBadge(day, element.id) }} — edit the group on
+                            {{ anchorNameFor(day, element.id) }}.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -747,6 +957,22 @@ const getMuscleGroupColor = muscleGroupColor
   white-space: nowrap;
 }
 
+/* Names the group a card belongs to ("Superset A"), so members are readable at
+   a glance without opening the editor. */
+.ex-group-badge {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(204, 255, 0, 0.4);
+  background: rgba(204, 255, 0, 0.08);
+  color: var(--primary-accent);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
 .ex-reorder {
   flex-shrink: 0;
   display: flex;
@@ -961,6 +1187,91 @@ const getMuscleGroupColor = muscleGroupColor
 /* Notes field spans the full editor grid (it's free text, not a numeric cell). */
 .rx-field-notes {
   grid-column: 1 / -1;
+}
+
+/* Type picker + its group member list both span the editor grid. */
+.rx-field-type,
+.rx-group {
+  grid-column: 1 / -1;
+}
+
+.rx-field select {
+  width: 100%;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 9px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.rx-field select:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+.rx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed rgba(204, 255, 0, 0.35);
+  border-radius: 8px;
+  background: rgba(204, 255, 0, 0.03);
+}
+
+.rx-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.rx-group-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rx-group-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-main);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.rx-group-option input {
+  accent-color: var(--primary-accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.rx-group-option:has(input:checked) {
+  border-color: var(--primary-accent);
+  background: rgba(204, 255, 0, 0.08);
+}
+
+.rx-group-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.rx-group-hint--warn {
+  color: var(--danger);
 }
 
 .rx-field textarea {

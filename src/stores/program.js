@@ -32,7 +32,7 @@ export const FAMOUS_PROGRAMS = [
   }
 ]
 
-export const PRESCRIPTION_KEYS = ['target_sets', 'rep_range_min', 'rep_range_max', 'target_rpe', 'rest_seconds', 'notes']
+export const PRESCRIPTION_KEYS = ['target_sets', 'rep_range_min', 'rep_range_max', 'target_rpe', 'rest_seconds', 'notes', 'group_type', 'group_key']
 
 // Normalize an API day into the local shape. Prescriptions live on the
 // pivot per exercise; locally we keep them keyed by exercise id.

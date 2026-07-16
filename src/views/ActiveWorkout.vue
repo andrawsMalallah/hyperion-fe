@@ -10,6 +10,16 @@ import { useSyncStore } from '../stores/sync'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { toKg, formatWeight } from '../utils/units'
+import {
+  isGroupType,
+  isTagType,
+  typeLabel,
+  typeOf,
+  groupKeyOf,
+  groupMembers,
+  groupLetter,
+  isLastOfGroup
+} from '../utils/grouping'
 import api from '../api'
 
 const props = defineProps({
@@ -143,6 +153,42 @@ onUnmounted(() => {
   }
 })
 
+// Exercise type ---------------------------------------------------------------
+// The type is prescribed on the day, so it's read straight off it rather than
+// copied into the session rows.
+
+/** "Drop Set" / "Pyramid Set" for the tag types, else '' — group types get a header. */
+function exTypeTag(ex) {
+  const type = typeOf(day.value, ex.id)
+  return isTagType(type) ? typeLabel(type) : ''
+}
+
+function isGrouped(ex) {
+  return isGroupType(typeOf(day.value, ex.id))
+}
+
+/**
+ * The header shown above a group's first exercise, naming it and the exercises
+ * it's performed with.
+ */
+function groupHeaderFor(ex) {
+  const type = typeOf(day.value, ex.id)
+  if (!isGroupType(type)) return null
+
+  const key = groupKeyOf(day.value, ex.id)
+  const members = groupMembers(day.value, key)
+  if (members[0] !== ex.id) return null
+
+  const names = members
+    .map(id => exerciseStore.exercises.find(e => e.id === id)?.name)
+    .filter(Boolean)
+
+  return {
+    label: `${typeLabel(type)} ${groupLetter(day.value, key)}`.trim(),
+    hint: `${names.join(' → ')} — back to back, rest after the last one.`
+  }
+}
+
 function formatPrevSets(prevSets) {
   if (!prevSets || prevSets.length === 0) return ''
   const shown = prevSets.slice(0, 4)
@@ -183,10 +229,15 @@ function saveSet(exIndex, setIndex) {
 
   s.completed = true
 
-  // Save to Pinia (converted to canonical kg)
+  // Save to Pinia (converted to canonical kg).
+  // A superset / giant set rests only once, after its last exercise — so a set
+  // logged on any earlier member of the group must not start the timer. The
+  // rest that does fire is the last exercise's own, which is why restSeconds
+  // still comes from the exercise being saved.
   s.setId = workoutStore.logSet(ex.id, toKg(s.weight, workoutStore.weightUnit), Number(s.reps), s.rpe || 0, {
     setType: s.set_type,
-    restSeconds: ex.rx?.rest_seconds || null
+    restSeconds: ex.rx?.rest_seconds || null,
+    startRest: isLastOfGroup(day.value, ex.id)
   })
 }
 
@@ -427,10 +478,19 @@ async function saveWorkout() {
       </div>
 
       <div v-else-if="activeWorkoutSession.length > 0" class="exercises-container" key="content">
-        <div v-for="(ex, exIndex) in activeWorkoutSession" :key="ex.id" class="card exercise-card">
+        <template v-for="(ex, exIndex) in activeWorkoutSession" :key="ex.id">
+          <!-- Names the group above its first exercise; the members follow as
+               their own cards, performed back to back. -->
+          <div class="group-header" v-if="groupHeaderFor(ex)">
+            <span class="group-header-label">{{ groupHeaderFor(ex).label }}</span>
+            <span class="group-header-hint">{{ groupHeaderFor(ex).hint }}</span>
+          </div>
+
+          <div class="card exercise-card" :class="{ 'exercise-card--grouped': isGrouped(ex) }">
           <div class="flex-row ex-header ex-header-container">
             <div class="ex-title-block">
               <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
+              <span v-if="exTypeTag(ex)" class="ex-type-tag">{{ exTypeTag(ex) }}</span>
               <span v-if="rxLabel(ex.rx)" class="rx-target-hint">{{ rxLabel(ex.rx) }}</span>
               <span v-if="ex.rx?.notes" class="rx-note">{{ ex.rx.notes }}</span>
               <span v-if="ex.prevSets && ex.prevSets.length > 0" class="prev-session-hint">
@@ -555,7 +615,8 @@ async function saveWorkout() {
             </div>
           </TransitionGroup>
 
-        </div>
+          </div>
+        </template>
 
         <!-- Actions -->
         <div class="builder-actions" style="margin-top: 24px;">
@@ -721,6 +782,55 @@ async function saveWorkout() {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Names a superset / giant set above its first exercise. The members follow as
+   ordinary cards, tied together by the accent rail below. */
+.group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px 10px 0 0;
+  border: 1px solid rgba(204, 255, 0, 0.3);
+  border-bottom: none;
+  background: rgba(204, 255, 0, 0.06);
+}
+
+.group-header-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--primary-accent);
+}
+
+.group-header-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+/* A grouped exercise carries an accent rail so the eye can tell where the group
+   starts and stops in a flat list of cards. */
+.exercise-card--grouped {
+  border-left: 3px solid rgba(204, 255, 0, 0.45);
+}
+
+/* "Drop Set" / "Pyramid Set" — a tag on a single exercise. */
+.ex-type-tag {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(204, 255, 0, 0.4);
+  background: rgba(204, 255, 0, 0.08);
+  color: var(--primary-accent);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .warmup-toggle {

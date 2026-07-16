@@ -1,7 +1,10 @@
 // The program export/import file format. Mirrors App\Services\ProgramFile on the
 // backend — change the two together, since import validates against those values.
 export const APP_MARKER = 'hyperion'
-export const SCHEMA_VERSION = 1
+// Version 2 adds the optional group_type / group_key pair to each exercise.
+// Import still accepts version 1 files (they simply describe no groups), so a
+// bump here doesn't strand anything already exported.
+export const SCHEMA_VERSION = 2
 
 // A program file is generated here rather than by the API: the store already
 // holds everything the file needs, so export costs no request and works offline.

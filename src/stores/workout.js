@@ -198,7 +198,10 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
     activeWorkoutSets.value.push(set)
 
-    if (timerEnabled.value) {
+    // options.startRest is false for a set logged on any exercise but the last
+    // of a superset / giant set: the group is performed back-to-back and rests
+    // once, after its final exercise.
+    if (timerEnabled.value && options.startRest !== false) {
       startRestTimer(options.restSeconds || defaultRestTime.value)
     }
     return set.id
