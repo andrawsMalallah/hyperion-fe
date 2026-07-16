@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
@@ -14,7 +14,16 @@ const mechanicsType = ref('Compound')
 
 // UI state
 const submitting = ref(false)
-const recentlyAdded = ref([])
+
+// "My exercises" list — the contributor's own submissions across every status,
+// server-paginated and searchable.
+const myExercises = ref([])
+const myPage = ref(1)
+const myLastPage = ref(1)
+const myPerPage = ref(15)
+const myLoading = ref(false)
+const mySearch = ref('')
+const myStatus = ref('')
 
 // Must match the seeded catalog taxonomy so filtering/grouping stays consistent.
 const muscleGroups = [
@@ -22,9 +31,51 @@ const muscleGroups = [
   'Triceps', 'Forearms', 'Core', 'Full Body'
 ]
 
+const statusMeta = {
+  approved: { label: 'Approved', cls: 'status-approved' },
+  pending: { label: 'Pending', cls: 'status-pending' },
+  rejected: { label: 'Rejected', cls: 'status-rejected' }
+}
+
 const isFormValid = computed(() => {
   return exerciseName.value.trim().length >= 2 && targetMuscleGroup.value !== ''
 })
+
+async function fetchMine(page = 1) {
+  myLoading.value = true
+  try {
+    const response = await api.get('/exercises/mine', {
+      params: {
+        page,
+        search: mySearch.value || undefined,
+        status: myStatus.value || undefined
+      }
+    })
+    myExercises.value = response.data.data
+    const meta = response.data.meta
+    myPage.value = meta?.current_page || 1
+    myLastPage.value = meta?.last_page || 1
+    myPerPage.value = meta?.per_page || 15
+  } catch (e) {
+    console.error('Failed to fetch your exercises:', e)
+  } finally {
+    myLoading.value = false
+  }
+}
+
+// Debounce the search so we don't fire a request per keystroke.
+let searchTimer = null
+function onSearchInput() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => fetchMine(1), 350)
+}
+
+function goToPage(page) {
+  if (page < 1 || page > myLastPage.value) return
+  fetchMine(page)
+}
+
+onMounted(() => fetchMine(1))
 
 async function submitExercise() {
   if (!isFormValid.value || submitting.value) return
@@ -39,17 +90,15 @@ async function submitExercise() {
     })
 
     const created = response.data.data
-    recentlyAdded.value.unshift({
-      id: created.id,
-      name: created.name,
-      target_muscle_group: created.target_muscle_group,
-      mechanics_type: created.mechanics_type
-    })
 
-    toast.success(`"${created.name}" submitted! You can use it right away; it will appear for everyone once approved.`)
+    toast.success(`"${created.name}" submitted for review. You can use it right away; it'll appear for everyone once an admin approves it.`)
     exerciseName.value = ''
     targetMuscleGroup.value = ''
     mechanicsType.value = 'Compound'
+
+    // Surface the new pending submission at the top of "My exercises".
+    mySearch.value = ''
+    fetchMine(1)
   } catch {
     // Validation / server errors are surfaced as toasts by the interceptor.
   } finally {
@@ -156,26 +205,104 @@ async function submitExercise() {
       </PrimaryButton>
     </div>
 
-    <!-- Recently Added Section -->
-    <div v-if="recentlyAdded.length > 0" class="recently-added-section">
-      <h3 class="form-section-title" style="margin-bottom: 16px;">Recently Added</h3>
-      <TransitionGroup name="list-fade" tag="div" class="recently-added-list">
-        <div v-for="ex in recentlyAdded" :key="ex.id" class="card recently-added-card">
-          <div class="ra-info">
-            <span class="ra-name">{{ ex.name }}</span>
-            <div class="ra-tags">
-              <span class="ra-tag">{{ ex.target_muscle_group }}</span>
-              <span class="ra-tag-sep">•</span>
-              <span class="ra-tag">{{ ex.mechanics_type }}</span>
-            </div>
-          </div>
-          <div class="ra-check-icon">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
+    <!-- My Exercises Section -->
+    <div class="my-exercises-section">
+      <h3 class="form-section-title" style="margin-bottom: 16px;">My Exercises</h3>
+
+      <!-- Filters -->
+      <div class="my-filters">
+        <div class="form-group my-filter-search">
+          <label class="form-label" for="my-search">Search</label>
+          <input
+            id="my-search"
+            v-model="mySearch"
+            type="text"
+            class="form-input"
+            placeholder="Search your submissions..."
+            @input="onSearchInput"
+          />
         </div>
-      </TransitionGroup>
+        <div class="form-group my-filter-status">
+          <label class="form-label" for="my-status">Status</label>
+          <select id="my-status" v-model="myStatus" class="form-input form-select" @change="fetchMine(1)">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Loading skeleton (mirrors the table) -->
+      <div v-if="myLoading && myExercises.length === 0" class="table-scroll card">
+        <table class="my-table">
+          <thead>
+            <tr>
+              <th class="th-num">#</th>
+              <th>Name</th>
+              <th>Muscle Group</th>
+              <th>Mechanics</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="n in 4" :key="n">
+              <td class="td-num"><span class="sk-bar sk-bar-num"></span></td>
+              <td><span class="sk-bar" style="width: 80%;"></span></td>
+              <td><span class="sk-bar" style="width: 60%;"></span></td>
+              <td><span class="sk-bar" style="width: 55%;"></span></td>
+              <td><span class="sk-bar sk-bar-pill"></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Empty -->
+      <div v-else-if="myExercises.length === 0" class="card empty-state">
+        <p class="empty-text">You haven't contributed any exercises yet.</p>
+      </div>
+
+      <!-- Table -->
+      <div v-else class="table-scroll card">
+        <table class="my-table">
+          <thead>
+            <tr>
+              <th class="th-num">#</th>
+              <th>Name</th>
+              <th>Muscle Group</th>
+              <th>Mechanics</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(ex, index) in myExercises" :key="ex.id">
+              <td class="td-num">{{ (myPage - 1) * myPerPage + index + 1 }}</td>
+              <td class="td-name">
+                <span class="name-inner">
+                  {{ ex.name }}
+                  <span v-if="ex.status === 'rejected' && ex.rejection_reason" class="my-reject-reason">
+                    Reason: {{ ex.rejection_reason }}
+                  </span>
+                </span>
+              </td>
+              <td>{{ ex.target_muscle_group }}</td>
+              <td>{{ ex.mechanics_type }}</td>
+              <td>
+                <span class="status-pill" :class="statusMeta[ex.status]?.cls">
+                  {{ statusMeta[ex.status]?.label || ex.status }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="myLastPage > 1" class="pagination">
+        <button class="page-btn" :disabled="myPage <= 1" @click="goToPage(myPage - 1)">Prev</button>
+        <span class="page-info">Page {{ myPage }} of {{ myLastPage }}</span>
+        <button class="page-btn" :disabled="myPage >= myLastPage" @click="goToPage(myPage + 1)">Next</button>
+      </div>
     </div>
   </div>
 </template>
@@ -324,56 +451,213 @@ async function submitExercise() {
   cursor: not-allowed;
 }
 
-/* Recently Added */
-.recently-added-list {
+/* My Exercises filters */
+.my-filters {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  align-items: flex-end;
 }
 
-.recently-added-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
+.my-filter-search {
+  flex: 1;
+}
+
+.my-filter-status {
+  width: 150px;
+  flex-shrink: 0;
+}
+
+/* My Exercises table */
+.table-scroll {
+  padding: 0;
+  overflow-x: auto;
   border: 1px solid var(--border-color);
   background: var(--bg-surface);
+  margin-bottom: 0;
 }
 
-.ra-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.th-num,
+.td-num {
+  width: 44px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  /* Never break the row number across lines (e.g. "10"). */
+  white-space: nowrap;
 }
 
-.ra-name {
-  font-size: 14px;
+.my-table {
+  width: 100%;
+  /* Auto layout keeps the other columns naturally sized; the Name column is
+     constrained on its own via .name-inner so it wraps the same as the admin
+     tables. min-width triggers horizontal scroll on narrow screens. */
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.my-table th {
+  text-align: left;
+  /* Side padding matches the body cells so headers line up over their columns. */
+  padding: 12px 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
-.ra-tags {
+.my-table td {
+  padding: 12px 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+  /* Long values wrap between words so the table fits big screens without
+     horizontal scroll; narrow screens still scroll via the table's min-width. */
+  overflow-wrap: break-word;
+}
+
+.my-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.my-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.td-name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Fixed-width inner box so the name wraps at the same width as the admin
+   tables, independent of how wide auto-layout makes the column. */
+.name-inner {
+  display: inline-block;
+  width: 170px;
+}
+
+.my-reject-reason {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Status pill */
+.status-pill {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.status-approved {
+  background-color: rgba(204, 255, 0, 0.1);
+  color: var(--primary-accent);
+  border: 1px solid rgba(204, 255, 0, 0.2);
+}
+
+.status-pending {
+  background-color: rgba(255, 200, 0, 0.1);
+  color: #ffca3a;
+  border: 1px solid rgba(255, 200, 0, 0.25);
+}
+
+.status-rejected {
+  background-color: rgba(255, 80, 80, 0.1);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 80, 80, 0.25);
+}
+
+/* Empty + skeleton */
+.empty-state {
+  padding: 28px 20px;
+  text-align: center;
+  border: 1px dashed var(--border-color);
+  background: var(--bg-surface);
+  margin-bottom: 0;
+}
+
+.empty-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Skeleton shimmer bars — sized to mirror the real cell content. */
+.sk-bar {
+  display: inline-block;
+  width: 70%;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+.sk-bar-num {
+  width: 16px;
+}
+
+.sk-bar-pill {
+  width: 62px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-bar { animation: none; }
+}
+
+/* Pagination */
+.pagination {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-secondary);
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
 }
 
-.ra-tag {
-  background-color: rgba(255, 255, 255, 0.03);
+.page-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  padding: 2px 6px;
-  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.15);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.ra-tag-sep {
-  color: var(--border-color);
+.page-btn:hover:not(:disabled) {
+  border-color: var(--text-secondary);
 }
 
-.ra-check-icon {
-  color: var(--success);
-  flex-shrink: 0;
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* Transitions */

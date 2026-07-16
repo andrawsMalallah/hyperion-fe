@@ -6,6 +6,7 @@ import { useWorkoutStore } from './workout';
 import { useHistoryStore } from './history';
 import { useDiscoverStore } from './discover';
 import { useProgressStore } from './progress';
+import { useAdminStore } from './admin';
 
 // Corrupt/partial localStorage must never crash store init (which would leave
 // the whole app unbootable). Fall back to null and clear the bad value.
@@ -30,6 +31,9 @@ export const useAuthStore = defineStore('auth', {
     // before this feature shipped has no flag — treat that as verified and let
     // the API's 409 gate correct it, rather than locking the user out here.
     isUnverified: (state) => !!state.token && state.user?.email_verified === false,
+    // Gates the admin dashboard link + route. Backend is the source of truth
+    // (EnsureAdmin middleware); this only decides what the SPA shows.
+    isAdmin: (state) => !!state.user?.is_admin,
   },
   
   actions: {
@@ -68,6 +72,7 @@ export const useAuthStore = defineStore('auth', {
       useHistoryStore().reset();
       useDiscoverStore().reset();
       useProgressStore().reset();
+      useAdminStore().reset();
       this.clearAuthData();
     },
 

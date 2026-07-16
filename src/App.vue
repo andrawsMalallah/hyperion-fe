@@ -15,6 +15,7 @@ const router = useRouter()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const user = computed(() => authStore.user)
+const isAdmin = computed(() => authStore.isAdmin)
 
 // User dropdown
 const showDropdown = ref(false)
@@ -32,6 +33,11 @@ const goToProfile = () => {
 const goToSettings = () => {
   showDropdown.value = false
   router.push('/settings')
+}
+
+const goToAdmin = () => {
+  showDropdown.value = false
+  router.push('/admin')
 }
 
 const closeDropdown = (e) => {
@@ -139,8 +145,15 @@ watch(isAuthenticated, async (newVal) => {
               Settings
             </button>
             
+            <button v-if="isAdmin" class="dropdown-item" @click="goToAdmin">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              Admin
+            </button>
+
             <div class="dropdown-divider"></div>
-            
+
             <button class="dropdown-item dropdown-logout" @click="promptLogout">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>

@@ -17,6 +17,7 @@ const History = () => import('../views/History.vue')
 const Progress = () => import('../views/Progress.vue')
 const Discover = () => import('../views/Discover.vue')
 const Contribute = () => import('../views/Contribute.vue')
+const AdminDashboard = () => import('../views/AdminDashboard.vue')
 
 // Auth Views (Login stays eager above — it is the first screen for guests)
 const Register = () => import('../views/auth/Register.vue')
@@ -117,6 +118,12 @@ const routes = [
     name: 'Contribute',
     component: Contribute,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    name: 'AdminDashboard',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, requiresAdmin: true }
   }
 ]
 
@@ -143,6 +150,12 @@ router.beforeEach((to, from) => {
   // verify screen (both its pending and callback modes share this route name).
   if (isUnverified && to.name !== 'VerifyEmail') {
     return '/verify-email'
+  }
+
+  // Admin-only pages: non-admins are bounced home (the backend also enforces
+  // this via the EnsureAdmin middleware — this just avoids a dead screen).
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    return '/'
   }
 })
 
