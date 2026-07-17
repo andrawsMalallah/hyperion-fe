@@ -1,4 +1,4 @@
-import { test, expect, api, finishWorkout } from './support/auth.js'
+import { test, expect, api, API, finishWorkout } from './support/auth.js'
 
 /**
  * Covers history.prependLog() — the reason it exists.
@@ -74,4 +74,58 @@ test('a workout finished after History was opened appears without a refetch', as
 
   // Top of the list, from local state alone.
   await expect(page.locator('.history-card').first()).toContainText(dayName)
+})
+
+/**
+ * Guards a load-bearing product invariant (CLAUDE.md): deleting a program KEEPS
+ * its workout logs. The days cascade away and workout_logs.program_day_id nulls
+ * out (nullOnDelete), so the session survives as history with no day — History
+ * renders it as "Unknown Day" / "Unknown Program". "Training history is the
+ * product", so the program-delete path must never be the one thing that erases it.
+ *
+ * A page.goto() is correct here (unlike the prepend test above): we WANT a fresh
+ * server fetch, to prove the surviving log is what the server returns.
+ */
+test('a workout survives its program being deleted and shows as Unknown Day', async ({ page, request, authToken }) => {
+  // Distinctive reps: other specs log 10/12, so "x 23" scopes to this session's
+  // set even though the account's History is shared across the whole run.
+  const REPS = 23
+
+  const exercise = (await api(request, authToken, 'GET', '/exercises?search=press')).data[0]
+
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: `Deletable Program ${Date.now()}`,
+    is_active: true,
+    days: [{
+      day_name: `Deletable ${Date.now()}`,
+      display_order: 1,
+      exercises: [{ exercise_id: exercise.id, target_sets: 1, rest_seconds: 60 }]
+    }]
+  })).data
+
+  // Log a session against that day, then delete the program out from under it.
+  await api(request, authToken, 'POST', '/workout-logs', {
+    client_uuid: crypto.randomUUID(),
+    program_day_id: program.days[0].id,
+    date_timestamp: new Date().toISOString(),
+    ended_at: new Date().toISOString(),
+    sets: [{ exercise_id: exercise.id, weight: 60, reps: REPS, set_type: 'working', set_order: 0 }]
+  })
+  // DELETE returns 204 (no body), so bypass api()'s JSON parse and assert ok.
+  const deleted = await request.fetch(`${API}/programs/${program.id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${authToken}`, Accept: 'application/json' }
+  })
+  expect(deleted.ok(), `DELETE program -> ${deleted.status()}`).toBeTruthy()
+
+  await page.goto('/history')
+
+  // Newest-first, so this run's session is the first "x 23" card. It's still
+  // there (survived the delete), now orphaned — Unknown Day / Unknown Program —
+  // with its logged sets intact.
+  const card = page.locator('.history-list:not([aria-hidden="true"]) .history-card', {
+    hasText: `x ${REPS}`
+  }).first()
+  await expect(card).toContainText('Unknown Day')
+  await expect(card).toContainText('Unknown Program')
 })
