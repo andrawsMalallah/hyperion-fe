@@ -1833,3 +1833,65 @@ body.modal-open {
   border-color: var(--primary-accent);
   background-color: var(--bg-surface-hover);
 }
+
+/* ===== Chart primitives ===================================================
+   Shared by the Progress charts (TrendChart, VolumeChart). Global rather than
+   scoped to either component: both need them, and the alternative is the same
+   ~55 lines duplicated in two files, drifting apart. Same reasoning as the
+   .history-* and .set-row primitives above. */
+.chart-holder {
+  position: relative;
+}
+
+/* Horizontally scrollable chart area with the scrollbar hidden — many
+   sessions grow the SVG past the viewport, keeping every label legible. */
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.chart-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+.axis-text {
+  font-size: 10px;
+  fill: var(--text-secondary);
+  font-weight: 600;
+}
+
+.direct-label {
+  font-size: 11px;
+  fill: var(--text-primary);
+  font-weight: 700;
+}
+
+.chart-tooltip {
+  position: absolute;
+  transform: translateY(-100%);
+  background: rgba(18, 18, 18, 0.95);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  pointer-events: none;
+  white-space: nowrap;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  z-index: 10;
+}
+
+.tt-muted {
+  color: var(--text-secondary);
+}

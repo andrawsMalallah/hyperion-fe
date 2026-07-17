@@ -5,17 +5,15 @@ import { useWorkoutStore } from '../stores/workout'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
 import { formatWeight } from '../utils/units'
+import TrendChart from '../components/TrendChart.vue'
+import VolumeChart from '../components/VolumeChart.vue'
+import { dateFmt } from '../utils/chart'
 
 const progressStore = useProgressStore()
 const workoutStore = useWorkoutStore()
 
 const pageLoading = ref(true)
 const unit = computed(() => workoutStore.weightUnit)
-
-// Chart data color — validated against the dark surface (#1E1E1E) with the
-// dataviz palette validator; the brand accent #CCFF00 is out of the dark
-// lightness band, #7A9900 is the nearest passing step of the same hue.
-const DATA_COLOR = '#7A9900'
 
 onMounted(async () => {
   // All trends/volume/PRs come from one server-side aggregate call now. Force a
@@ -70,98 +68,14 @@ function measure() {
   if (chartWrap.value) viewWidth.value = Math.max(240, chartWrap.value.clientWidth - 40)
 }
 
-// Horizontal scroll offsets, so the (non-scrolling) tooltips can track the
-// point/bar as the chart is scrolled.
-const lineScrollLeft = ref(0)
-const barScrollLeft = ref(0)
-
-const PAD = { top: 16, right: 16, bottom: 30, left: 44 }
-const LINE_H = 220
-const BAR_H = 180
-const LINE_GAP = 64 // min horizontal px between trend points
-const BAR_SLOT = 56 // min horizontal px per weekly bar
-
 const trendPoints = computed(() => {
   const series = progressStore.e1rmByExercise[selectedExerciseId.value] || []
   return series.map(p => ({ ...p, date: new Date(p.date) }))
 })
 
-const trendGeo = computed(() => {
-  const pts = trendPoints.value
-  if (pts.length < 2) return null
-  const contentW = Math.max(viewWidth.value, PAD.left + PAD.right + (pts.length - 1) * LINE_GAP)
-  const w = contentW - PAD.left - PAD.right
-  const h = LINE_H - PAD.top - PAD.bottom
-  const ys = pts.map(p => p.e1rm)
-  const yMax = Math.max(...ys) * 1.08
-  const yMin = Math.min(...ys) * 0.92
-  // Space points evenly by session index (not by calendar gap) so labels never
-  // collide when several sessions fall on nearby dates.
-  const sx = i => PAD.left + (pts.length === 1 ? w / 2 : (i / (pts.length - 1)) * w)
-  const sy = v => PAD.top + h - ((v - yMin) / (yMax - yMin)) * h
-  const mapped = pts.map((p, i) => ({ ...p, x: sx(i), y: sy(p.e1rm) }))
-  const path = mapped.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-  // ~4 recessive horizontal gridlines with round-ish values
-  const ticks = []
-  for (let i = 0; i <= 3; i++) {
-    const v = yMin + ((yMax - yMin) * i) / 3
-    ticks.push({ v, y: sy(v) })
-  }
-  return { points: mapped, path, ticks, width: contentW }
-})
-
 const volumeWeeks = computed(() =>
   progressStore.weeklyVolume.map(w => ({ weekStart: new Date(w.week_start), volume: w.volume }))
 )
-
-const barGeo = computed(() => {
-  const weeks = volumeWeeks.value
-  if (weeks.length === 0) return null
-  const contentW = Math.max(viewWidth.value, PAD.left + PAD.right + weeks.length * BAR_SLOT)
-  const w = contentW - PAD.left - PAD.right
-  const h = BAR_H - PAD.top - PAD.bottom
-  const max = Math.max(...weeks.map(x => x.volume)) || 1
-  const slot = w / weeks.length
-  const barW = Math.min(40, Math.max(10, slot - 8))
-  const bars = weeks.map((entry, i) => {
-    const bh = Math.max(2, (entry.volume / max) * h)
-    return {
-      ...entry,
-      x: PAD.left + slot * i + (slot - barW) / 2,
-      y: PAD.top + h - bh,
-      w: barW,
-      h: bh,
-      label: entry.weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    }
-  })
-  return { bars, baseline: PAD.top + h, width: contentW }
-})
-
-// ---- Hover / tap state
-const lineHover = ref(null)
-const barHover = ref(null)
-
-// Map a client X (mouse or touch) to the nearest trend point.
-function nearestPoint(clientX, target) {
-  if (!trendGeo.value) return null
-  const rect = target.getBoundingClientRect()
-  const x = clientX - rect.left
-  let nearest = null
-  for (const p of trendGeo.value.points) {
-    if (!nearest || Math.abs(p.x - x) < Math.abs(nearest.x - x)) nearest = p
-  }
-  return nearest
-}
-
-function onLineMove(e) {
-  lineHover.value = nearestPoint(e.clientX, e.currentTarget)
-}
-
-// Tap-to-inspect on touch devices, where hover doesn't exist.
-function onLineTouch(e) {
-  if (!e.touches[0]) return
-  lineHover.value = nearestPoint(e.touches[0].clientX, e.currentTarget)
-}
 
 // ---- Recent PRs smooth scroll (from the PRs stat tile)
 const recentPRsSection = ref(null)
@@ -169,7 +83,6 @@ function scrollToPRs() {
   recentPRsSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const dateFmt = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 // Best working set from the 5 most recent sessions of the selected exercise,
 // newest first (trendPoints is oldest-first).
@@ -271,51 +184,7 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
             <span v-for="(b, i) in 7" :key="i" class="sk sk-shimmer" :style="{ height: [45, 62, 38, 70, 55, 80, 60][i] + '%' }"></span>
           </div>
         </div>
-        <div v-else-if="!trendGeo" class="chart-empty">Need at least two sessions of this exercise to draw a trend.</div>
-        <div v-else class="chart-holder">
-          <div class="chart-scroll" @scroll="lineScrollLeft = $event.target.scrollLeft">
-            <svg :width="trendGeo.width" :height="LINE_H" @mousemove="onLineMove" @mouseleave="lineHover = null" @touchstart="onLineTouch" role="img" :aria-label="`Estimated one rep max trend, ${trendPoints.length} sessions`">
-              <!-- recessive grid -->
-              <g v-for="t in trendGeo.ticks" :key="t.y">
-                <line :x1="PAD.left" :x2="trendGeo.width - PAD.right" :y1="t.y" :y2="t.y" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-                <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">{{ formatWeight(t.v, unit) }}</text>
-              </g>
-              <!-- series -->
-              <path :d="trendGeo.path" fill="none" :stroke="DATA_COLOR" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-              <!-- points: small always, larger ring on hover/tap -->
-              <circle
-                v-for="p in trendGeo.points"
-                :key="p.x"
-                :cx="p.x" :cy="p.y"
-                :r="lineHover && lineHover.x === p.x ? 5 : 3"
-                :fill="DATA_COLOR"
-                stroke="#1E1E1E"
-                stroke-width="2"
-              />
-              <!-- crosshair -->
-              <line v-if="lineHover" :x1="lineHover.x" :x2="lineHover.x" :y1="PAD.top" :y2="LINE_H - PAD.bottom" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
-              <!-- selective direct label: last point only -->
-              <text
-                v-if="trendGeo.points.length"
-                :x="trendGeo.points[trendGeo.points.length - 1].x"
-                :y="trendGeo.points[trendGeo.points.length - 1].y - 10"
-                text-anchor="end"
-                class="direct-label"
-              >{{ formatWeight(trendGeo.points[trendGeo.points.length - 1].e1rm, unit) }}{{ unit }}</text>
-              <!-- x labels: every session date (chart scrolls to keep them legible) -->
-              <text v-for="(p, i) in trendGeo.points" :key="'xl' + i" :x="p.x" :y="LINE_H - 10" text-anchor="middle" class="axis-text">{{ dateFmt(p.date) }}</text>
-            </svg>
-          </div>
-          <div
-            v-if="lineHover"
-            class="chart-tooltip"
-            :style="{ left: Math.max(8, Math.min(lineHover.x - lineScrollLeft + 10, viewWidth - 150)) + 'px', top: (lineHover.y - 14) + 'px' }"
-          >
-            <strong>{{ dateFmt(lineHover.date) }}</strong>
-            {{ formatWeight(lineHover.weight, unit) }}{{ unit }} × {{ lineHover.reps }}
-            <span class="tt-muted">est. {{ formatWeight(lineHover.e1rm, unit) }}{{ unit }}</span>
-          </div>
-        </div>
+        <TrendChart v-else :points="trendPoints" :unit="unit" :view-width="viewWidth" />
       </div>
 
       <!-- Recent top sets: best working set from the last 5 sessions of the
@@ -347,33 +216,7 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
         <h2 class="chart-title">Weekly volume ({{ unit }})</h2>
         <p class="chart-sub">Working sets only, weight × reps</p>
 
-        <div v-if="!barGeo" class="chart-empty">No volume yet.</div>
-        <div v-else class="chart-holder">
-          <div class="chart-scroll" @scroll="barScrollLeft = $event.target.scrollLeft">
-            <svg :width="barGeo.width" :height="BAR_H" role="img" aria-label="Weekly training volume">
-              <line :x1="PAD.left" :x2="barGeo.width - PAD.right" :y1="barGeo.baseline" :y2="barGeo.baseline" stroke="rgba(255,255,255,0.14)" stroke-width="1" />
-              <g v-for="(b, i) in barGeo.bars" :key="i" @mouseenter="barHover = b" @mouseleave="barHover = null" @touchstart="barHover = b">
-                <!-- oversized hit target -->
-                <rect :x="b.x - 4" :y="PAD.top" :width="b.w + 8" :height="barGeo.baseline - PAD.top" fill="transparent" />
-                <!-- rounded top, flat baseline: rounded rect clipped at the bottom -->
-                <path
-                  :d="`M${b.x},${barGeo.baseline} V${b.y + 4} Q${b.x},${b.y} ${b.x + 4},${b.y} H${b.x + b.w - 4} Q${b.x + b.w},${b.y} ${b.x + b.w},${b.y + 4} V${barGeo.baseline} Z`"
-                  :fill="DATA_COLOR"
-                  :opacity="barHover && barHover.x === b.x ? 1 : 0.85"
-                />
-                <text :x="b.x + b.w / 2" :y="BAR_H - 10" text-anchor="middle" class="axis-text">{{ b.label }}</text>
-              </g>
-            </svg>
-          </div>
-          <div
-            v-if="barHover"
-            class="chart-tooltip"
-            :style="{ left: Math.max(8, Math.min(barHover.x - barScrollLeft, viewWidth - 150)) + 'px', top: (barHover.y - 14) + 'px' }"
-          >
-            <strong>Wk of {{ barHover.label }}</strong>
-            {{ formatWeight(barHover.volume, unit) }}{{ unit }}
-          </div>
-        </div>
+        <VolumeChart :weeks="volumeWeeks" :unit="unit" :view-width="viewWidth" />
       </div>
 
       <!-- Recent PRs -->
@@ -598,62 +441,6 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
   margin: 4px 0 12px 0;
 }
 
-.chart-holder {
-  position: relative;
-}
-
-/* Horizontally scrollable chart area with the scrollbar hidden — many
-   sessions grow the SVG past the viewport, keeping every label legible. */
-.chart-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.chart-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.chart-empty {
-  color: var(--text-secondary);
-  font-size: 13px;
-  padding: 24px 0;
-}
-
-.axis-text {
-  font-size: 10px;
-  fill: var(--text-secondary);
-  font-weight: 600;
-}
-
-.direct-label {
-  font-size: 11px;
-  fill: var(--text-primary);
-  font-weight: 700;
-}
-
-.chart-tooltip {
-  position: absolute;
-  transform: translateY(-100%);
-  background: rgba(18, 18, 18, 0.95);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--text-primary);
-  pointer-events: none;
-  white-space: nowrap;
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  z-index: 10;
-}
-
-.tt-muted {
-  color: var(--text-secondary);
-}
 
 .pr-list {
   display: flex;
