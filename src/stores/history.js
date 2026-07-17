@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
 import { useToastStore } from './toast'
+import { useWorkoutStore } from './workout'
+import { buildHistoryCsv, buildHistoryJson, historyFileName, downloadTextFile } from '../utils/historyExport'
 
 export const useHistoryStore = defineStore('history', () => {
   const workout_logs = ref([])
@@ -9,11 +11,34 @@ export const useHistoryStore = defineStore('history', () => {
   const historyHasMore = ref(true)
   const historyLoading = ref(false)
   const loadFailed = ref(false)
+  const exporting = ref(false)
 
   const isLoaded = ref(false)
 
+  // Active filters (Session: History filters). programId '' = all programs,
+  // 'unknown' = sessions whose program was deleted, otherwise a program id.
+  // range 'all' | '7' | '30' | '90' days. Not persisted — transient view state.
+  const filters = ref({ programId: '', range: 'all' })
+
   const STALE_AFTER_MS = 60000
   let lastLoadedAt = 0
+
+  // Translate the filter state into the API query params the index accepts.
+  // The date range is resolved to a local `from` date here so it matches what
+  // the user sees (a UTC cutoff could drop a session near midnight).
+  function activeFilterParams() {
+    const params = {}
+    if (filters.value.programId) params.program_id = filters.value.programId
+
+    const days = { 7: 7, 30: 30, 90: 90 }[filters.value.range]
+    if (days) {
+      const from = new Date()
+      from.setDate(from.getDate() - days)
+      const pad = (n) => String(n).padStart(2, '0')
+      params.from = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`
+    }
+    return params
+  }
 
   async function fetchHistory(reset = false, isScroll = false) {
     if (historyLoading.value) return
@@ -31,7 +56,7 @@ export const useHistoryStore = defineStore('history', () => {
     try {
       const page = replace ? 1 : historyPage.value
       const response = await api.get('/workout-logs', {
-        params: { page },
+        params: { page, ...activeFilterParams() },
         suppressErrorToast: true
       })
 
@@ -97,6 +122,73 @@ export const useHistoryStore = defineStore('history', () => {
     return saved
   }
 
+  // Pull EVERY page of history, independent of what's scrolled into view — the
+  // display list (workout_logs) is only the pages the user has lazily loaded, so
+  // exporting that would silently truncate. Deliberately does not touch the
+  // display state. Capped at a sane page ceiling so a bad `last_page` can't spin.
+  async function fetchAllForExport() {
+    const all = []
+    let page = 1
+    let lastPage = 1
+    const MAX_PAGES = 1000
+    do {
+      const response = await api.get('/workout-logs', {
+        params: { page },
+        suppressErrorToast: true,
+      })
+      all.push(...response.data.data)
+      lastPage = response.data.meta?.last_page || 1
+      page++
+    } while (page <= lastPage && page <= MAX_PAGES)
+    return all
+  }
+
+  // Export the full workout history as a CSV or JSON download. Weights are
+  // emitted in the user's current display unit (read from the workout store) so
+  // the file matches the app. Orchestrated here — like programStore.exportProgram
+  // — so the view stays presentational.
+  async function exportHistory(format) {
+    if (exporting.value) return
+    exporting.value = true
+    const toast = useToastStore()
+    try {
+      const logs = await fetchAllForExport()
+      if (logs.length === 0) {
+        toast.error('No workouts to export yet.')
+        return
+      }
+      const unit = useWorkoutStore().weightUnit
+      if (format === 'csv') {
+        // Prepend a UTF-8 BOM so Excel reads exercise names/notes with non-ASCII
+        // characters correctly instead of mojibake.
+        downloadTextFile(String.fromCharCode(0xFEFF) + buildHistoryCsv(logs, unit), historyFileName('csv'), 'text/csv;charset=utf-8')
+      } else {
+        downloadTextFile(
+          JSON.stringify(buildHistoryJson(logs, unit), null, 2),
+          historyFileName('json'),
+          'application/json'
+        )
+      }
+      toast.success(`History exported as ${format.toUpperCase()}.`)
+    } catch (e) {
+      console.error('Failed to export history:', e)
+      toast.error('Could not export history.')
+    } finally {
+      exporting.value = false
+    }
+  }
+
+  // Apply a new filter set and reload from page 1. reset=true short-circuits the
+  // stale-cache guard, so a filter change always hits the server.
+  function setFilters(next) {
+    filters.value = { ...filters.value, ...next }
+    return fetchHistory(true)
+  }
+
+  function clearFilters() {
+    return setFilters({ programId: '', range: 'all' })
+  }
+
   function reset() {
     workout_logs.value = []
     historyPage.value = 1
@@ -104,6 +196,7 @@ export const useHistoryStore = defineStore('history', () => {
     historyLoading.value = false
     loadFailed.value = false
     isLoaded.value = false
+    filters.value = { programId: '', range: 'all' }
   }
 
   return {
@@ -112,11 +205,16 @@ export const useHistoryStore = defineStore('history', () => {
     historyHasMore,
     historyLoading,
     loadFailed,
+    exporting,
     isLoaded,
+    filters,
     fetchHistory,
+    setFilters,
+    clearFilters,
     prependLog,
     deleteWorkout,
     updateWorkout,
+    exportHistory,
     reset
   }
 })

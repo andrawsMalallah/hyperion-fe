@@ -14,6 +14,16 @@
           <span v-else>Send Reset Link</span>
         </PrimaryButton>
 
+        <!--
+          Two things make this slow: the free-tier API can be cold-starting
+          (30-50s) and the reset email is sent synchronously within the request.
+          Only shown once the request has been in flight past the threshold, so a
+          normal fast send never sees it.
+        -->
+        <p v-if="showWakingHint" class="waking-hint" role="status">
+          Still working — waking the server and sending your email. This can take up to a minute. Hang tight…
+        </p>
+
         <div style="text-align: center; font-size: 14px; margin-top: 16px; color: var(--text-secondary);">
           Remember your password? 
           <router-link to="/login" style="color: var(--primary-accent); text-decoration: none; font-weight: 600;">Sign In</router-link>
@@ -24,17 +34,34 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import api from '@/api';
 import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
 
+// A request still in flight after this long is a cold-starting dyno and/or the
+// synchronous email send — that's when the reassurance is worth showing.
+const WAKING_HINT_DELAY_MS = 3000;
+
 const email = ref('');
 const loading = ref(false);
+const showWakingHint = ref(false);
+let wakingHintTimer = null;
 const toast = useToastStore();
+
+const clearWakingHint = () => {
+  if (wakingHintTimer) {
+    clearTimeout(wakingHintTimer);
+    wakingHintTimer = null;
+  }
+  showWakingHint.value = false;
+};
 
 const handleForgotPassword = async () => {
   loading.value = true;
+  wakingHintTimer = setTimeout(() => {
+    showWakingHint.value = true;
+  }, WAKING_HINT_DELAY_MS);
   try {
     const response = await api.post('/forgot-password', { email: email.value });
     toast.success(response.data.message || 'Password reset link sent! Check your email.');
@@ -43,8 +70,12 @@ const handleForgotPassword = async () => {
     // Validation / server errors are surfaced as toasts by the interceptor.
   } finally {
     loading.value = false;
+    clearWakingHint();
   }
 };
+
+// Guard against the timer firing after the user navigates away mid-request.
+onUnmounted(clearWakingHint);
 </script>
 
 <style scoped>
@@ -63,5 +94,13 @@ const handleForgotPassword = async () => {
 
 .text-center {
   text-align: center;
+}
+
+.waking-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 </style>

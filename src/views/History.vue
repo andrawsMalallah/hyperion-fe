@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useHistoryStore } from '../stores/history'
 import { useWorkoutStore } from '../stores/workout'
+import { useProgramStore } from '../stores/program'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
 import AppModal from '../components/AppModal.vue'
@@ -11,7 +12,37 @@ import { formatWeight } from '../utils/units'
 
 const historyStore = useHistoryStore()
 const workoutStore = useWorkoutStore()
+const programStore = useProgramStore()
 const toast = useToastStore()
+
+// --- Filters (program + date range presets) ---
+const DATE_PRESETS = [
+  { key: 'all', label: 'All' },
+  { key: '7', label: '7d' },
+  { key: '30', label: '30d' },
+  { key: '90', label: '90d' },
+]
+
+// Program options for the dropdown: the user's current programs, plus a
+// "Deleted / Unknown" bucket for sessions whose program was removed.
+const programOptions = computed(() => programStore.user_programs)
+
+const filtersActive = computed(
+  () => historyStore.filters.programId !== '' || historyStore.filters.range !== 'all'
+)
+
+function onProgramFilterChange(event) {
+  historyStore.setFilters({ programId: event.target.value })
+}
+
+function setRange(key) {
+  if (historyStore.filters.range === key) return
+  historyStore.setFilters({ range: key })
+}
+
+function clearFilters() {
+  historyStore.clearFilters()
+}
 
 // Per-card overflow (⋯) menu, delete confirm, and edit modal.
 const openMenuId = ref(null)
@@ -21,12 +52,29 @@ const deleting = ref(false)
 const showEditModal = ref(false)
 const editTarget = ref(null)
 
+// Header "Export" dropdown (CSV / JSON).
+const exportMenuOpen = ref(false)
+
 function toggleMenu(id) {
   openMenuId.value = openMenuId.value === id ? null : id
+  exportMenuOpen.value = false
 }
 
 function closeMenu() {
   openMenuId.value = null
+  exportMenuOpen.value = false
+}
+
+function toggleExportMenu() {
+  exportMenuOpen.value = !exportMenuOpen.value
+  openMenuId.value = null
+}
+
+// Fetch the full history and download it; the store handles the empty case,
+// unit conversion and error toasts.
+function doExport(format) {
+  exportMenuOpen.value = false
+  historyStore.exportHistory(format)
 }
 
 function askDelete(w) {
@@ -76,7 +124,7 @@ const pastWorkouts = computed(() => {
 
       const sets = log.sets || []
       const numExercises = new Set(sets.map(s => s.exercise_id)).size
-      
+
       // Group sets by exercise
       const exerciseGroupsMap = new Map()
       sets.forEach(s => {
@@ -94,7 +142,7 @@ const pastWorkouts = computed(() => {
         group.sets.sort((a, b) => a.set_order - b.set_order)
         return group
       })
-      
+
       let durationMin = null
       if (log.ended_at) {
         const ms = new Date(log.ended_at) - new Date(log.date_timestamp)
@@ -129,6 +177,8 @@ function setupObserver() {
 }
 
 onMounted(async () => {
+  // Programs power the filter dropdown; harmless no-op if already loaded.
+  programStore.fetchPrograms()
   await historyStore.fetchHistory(false, false)
   setupObserver()
 })
@@ -146,13 +196,81 @@ onUnmounted(() => {
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
       <BackButton />
       <h1 class="title m-0">Workout History</h1>
-      <router-link to="/progress" class="btn-secondary tap-target no-underline progress-link" style="margin-left: auto; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <router-link to="/progress" class="btn-secondary tap-target no-underline progress-link"
+        style="margin-left: auto; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
           <polyline points="17 6 23 6 23 12"></polyline>
         </svg>
         Progress
       </router-link>
+
+      <!-- Export history (CSV / JSON). Kept reachable when a filter is active so
+           the full history can still be exported even if the filter shows none. -->
+      <div v-if="pastWorkouts.length > 0 || filtersActive" class="history-export-wrap">
+        <button class="btn-secondary export-btn tap-target" @click.stop="toggleExportMenu"
+          :disabled="historyStore.exporting" :aria-expanded="exportMenuOpen" aria-haspopup="true" title="Export history"
+          aria-label="Export workout history">
+          <div v-if="historyStore.exporting" class="spinner" style="width: 14px; height: 14px; border-width: 2px;">
+          </div>
+          <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+        <div v-if="exportMenuOpen" class="history-menu export-menu" @click.stop>
+          <button class="history-menu-item" @click="doExport('csv')">Download CSV</button>
+          <button class="history-menu-item" @click="doExport('json')">Download JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar: program dropdown + date-range segmented control. Hidden only
+         when there is genuinely nothing to filter (no history, no active filter). -->
+    <div v-if="pastWorkouts.length > 0 || filtersActive" class="history-filters mb-24">
+      <div class="filter-select-wrap">
+        <select
+          class="filter-select"
+          :value="historyStore.filters.programId"
+          @change="onProgramFilterChange"
+          aria-label="Filter by program"
+        >
+          <option value="">All programs</option>
+          <option v-for="program in programOptions" :key="program.id" :value="String(program.id)">{{ program.name }}</option>
+          <option value="unknown">Deleted / Unknown</option>
+        </select>
+        <svg class="filter-select-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+
+      <div class="filter-segment" role="group" aria-label="Filter by date range">
+        <button
+          v-for="preset in DATE_PRESETS"
+          :key="preset.key"
+          type="button"
+          class="filter-segment-btn"
+          :class="{ 'filter-segment-btn--active': historyStore.filters.range === preset.key }"
+          :aria-pressed="historyStore.filters.range === preset.key"
+          @click="setRange(preset.key)"
+        >
+          {{ preset.label }}
+        </button>
+      </div>
+
+      <!-- Always rendered; disabled when there's nothing to clear, so it never
+           shifts the row by appearing/disappearing. -->
+      <button
+        type="button"
+        class="filter-clear-btn"
+        :disabled="!filtersActive"
+        @click="clearFilters"
+      >
+        Clear
+      </button>
     </div>
 
     <!-- Loading Skeleton (Initial Load) — mirrors the real workout card -->
@@ -180,7 +298,8 @@ onUnmounted(() => {
           <div v-for="i in 2" :key="'ex-' + i" class="history-exercise-group sk-exercise-group">
             <div class="sk sk-shimmer" style="width: 130px; height: 14px;"></div>
             <div class="history-sets-flex mt-8">
-              <div v-for="p in (i === 1 ? 4 : 3)" :key="p" class="sk sk-shimmer" style="width: 82px; height: 24px; border-radius: 6px;"></div>
+              <div v-for="p in (i === 1 ? 4 : 3)" :key="p" class="sk sk-shimmer"
+                style="width: 82px; height: 24px; border-radius: 6px;"></div>
             </div>
           </div>
         </div>
@@ -199,7 +318,8 @@ onUnmounted(() => {
           <div class="history-header-right">
             <span class="history-date-badge">{{ w.dateStr }}</span>
             <div class="history-menu-wrap">
-              <button class="history-menu-btn" @click.stop="toggleMenu(w.id)" :aria-expanded="openMenuId === w.id" aria-haspopup="true" title="Workout actions" aria-label="Workout actions">
+              <button class="history-menu-btn" @click.stop="toggleMenu(w.id)" :aria-expanded="openMenuId === w.id"
+                aria-haspopup="true" title="Workout actions" aria-label="Workout actions">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
                   <circle cx="12" cy="5" r="1.6"></circle>
                   <circle cx="12" cy="12" r="1.6"></circle>
@@ -208,11 +328,19 @@ onUnmounted(() => {
               </button>
               <div v-if="openMenuId === w.id" class="history-menu" @click.stop>
                 <button class="history-menu-item" @click="openEdit(w)">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                  </svg>
                   Edit
                 </button>
                 <button class="history-menu-item history-menu-item--danger" @click="askDelete(w)">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
                   Delete
                 </button>
               </div>
@@ -232,11 +360,14 @@ onUnmounted(() => {
           </div>
           <div class="history-stat-box">
             <span class="stat-label">Total Volume</span>
-            <span class="stat-val">{{ formatWeight(w.totalVolume, workoutStore.weightUnit) }} <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ workoutStore.weightUnit }}</span></span>
+            <span class="stat-val">{{ formatWeight(w.totalVolume, workoutStore.weightUnit) }} <span
+                style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ workoutStore.weightUnit
+                }}</span></span>
           </div>
           <div v-if="w.durationMin" class="history-stat-box">
             <span class="stat-label">Duration</span>
-            <span class="stat-val">{{ w.durationMin }} <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">min</span></span>
+            <span class="stat-val">{{ w.durationMin }} <span
+                style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">min</span></span>
           </div>
         </div>
 
@@ -246,8 +377,10 @@ onUnmounted(() => {
             <h4 class="history-ex-name m-0">{{ group.exerciseName }}</h4>
             <div class="history-sets-flex mt-8">
               <div v-for="(set, sIdx) in group.sets" :key="set.id" class="history-set-pill">
-                <span class="set-num-label">{{ (set.set_type || 'working') === 'warmup' ? 'W' : 'S' + (sIdx + 1) }}</span>
-                <span class="set-val-label">{{ formatWeight(set.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
+                <span class="set-num-label">{{ (set.set_type || 'working') === 'warmup' ? 'W' : 'S' + (sIdx + 1)
+                  }}</span>
+                <span class="set-val-label">{{ formatWeight(set.weight, workoutStore.weightUnit) }}{{
+                  workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
               </div>
             </div>
           </div>
@@ -264,23 +397,40 @@ onUnmounted(() => {
     <!-- Error State -->
     <div v-else-if="historyStore.loadFailed" class="empty-state card py-40 text-center">
       <p style="color: var(--text-secondary); margin: 0 0 16px 0;">Couldn't load your workout history.</p>
-      <PrimaryButton class="inline-flex px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;" @click="fetchHistory(true)">
+      <PrimaryButton class="inline-flex px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;"
+        @click="fetchHistory(true)">
         Try Again
+      </PrimaryButton>
+    </div>
+
+    <!-- Filtered-empty State: history exists, but nothing matches the filters. -->
+    <div v-else-if="!loading && filtersActive" class="empty-state card py-40 text-center">
+      <p style="color: var(--text-secondary); margin: 0 0 16px 0;">No workouts match these filters.</p>
+      <PrimaryButton class="inline-flex px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;"
+        @click="clearFilters">
+        Clear Filters
       </PrimaryButton>
     </div>
 
     <!-- Empty State -->
     <div v-else-if="!loading" class="empty-state card py-40 text-center">
-      <p style="color: var(--text-secondary); margin: 0 0 16px 0;">No workouts logged yet. Your fitness journey starts here!</p>
-      <PrimaryButton to="/" class="inline-flex no-underline px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;">
+      <p style="color: var(--text-secondary); margin: 0 0 16px 0;">No workouts logged yet. Your fitness journey starts
+        here!
+      </p>
+      <PrimaryButton to="/" class="inline-flex no-underline px-24"
+        style="justify-content: center; max-width: max-content; margin: 0 auto;">
         Go to Home
       </PrimaryButton>
     </div>
 
     <!-- Loading Spinner / Footer -->
-    <div class="footer-loader" ref="loaderRef" style="display: flex; justify-content: center; align-items: center; min-height: 45px; box-sizing: border-box; margin-top: 16px;">
-      <div v-if="loading && pastWorkouts.length > 0" class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
-      <button v-else-if="historyStore.loadFailed && pastWorkouts.length > 0" class="btn-secondary tap-target px-24" @click="fetchHistory()">
+    <div class="footer-loader" ref="loaderRef"
+      style="display: flex; justify-content: center; align-items: center; min-height: 45px; box-sizing: border-box; margin-top: 16px;">
+      <div v-if="loading && pastWorkouts.length > 0" class="spinner"
+        style="width: 24px; height: 24px; border-width: 3px;">
+      </div>
+      <button v-else-if="historyStore.loadFailed && pastWorkouts.length > 0" class="btn-secondary tap-target px-24"
+        @click="fetchHistory()">
         Retry loading more
       </button>
       <div v-else-if="!hasMore && pastWorkouts.length > 0" class="end-message" style="margin: 0;">
@@ -288,25 +438,16 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Click-catcher to dismiss an open overflow menu -->
-    <div v-if="openMenuId !== null" class="history-menu-backdrop" @click="closeMenu"></div>
+    <!-- Click-catcher to dismiss an open overflow / export menu -->
+    <div v-if="openMenuId !== null || exportMenuOpen" class="history-menu-backdrop" @click="closeMenu"></div>
 
     <!-- Delete confirm -->
-    <AppModal
-      v-model:show="showDeleteModal"
-      title="Delete workout?"
+    <AppModal v-model:show="showDeleteModal" title="Delete workout?"
       message="This permanently removes this logged workout and all its sets. This can't be undone."
-      confirm-text="Delete"
-      cancel-text="Cancel"
-      @confirm="confirmDelete"
-    />
+      confirm-text="Delete" cancel-text="Cancel" @confirm="confirmDelete" />
 
     <!-- Edit workout -->
-    <EditWorkoutModal
-      v-model:show="showEditModal"
-      :workout="editTarget"
-      :weight-unit="workoutStore.weightUnit"
-    />
+    <EditWorkoutModal v-model:show="showEditModal" :workout="editTarget" :weight-unit="workoutStore.weightUnit" />
   </div>
 </template>
 
@@ -314,7 +455,7 @@ onUnmounted(() => {
 /* Header row: keep the Progress pill (and its icon) at natural size — on a
    narrow phone the long title would otherwise squeeze the flex row and
    collapse the SVG. Let the title absorb the squeeze / wrap instead. */
-.history-page .flex-row > .title {
+.history-page .flex-row>.title {
   min-width: 0;
 }
 
@@ -326,6 +467,180 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Filter bar: program dropdown + date-range segmented control. All controls
+   share one height so they line up, and the row wraps on narrow screens. */
+.history-filters {
+  --filter-control-height: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Program dropdown — native arrow removed for a consistent custom chevron with
+   comfortable edge spacing (the native one sat too tight to the border). */
+.filter-select-wrap {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.filter-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: var(--filter-control-height);
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.filter-select:focus-visible {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+@media (hover: hover) {
+  .filter-select:hover {
+    border-color: var(--primary-accent);
+  }
+}
+
+.filter-select-chevron {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Date range as a single segmented control rather than free-floating pills.
+   Grows to fill the row like the program select; its buttons split evenly. */
+.filter-segment {
+  display: flex;
+  flex: 1 1 240px;
+  height: var(--filter-control-height);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  overflow: hidden;
+}
+
+.filter-segment-btn {
+  flex: 1 1 0;
+  min-width: 44px;
+  padding: 0 8px;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.filter-segment-btn:first-child {
+  border-left: none;
+}
+
+@media (hover: hover) {
+  .filter-segment-btn:not(.filter-segment-btn--active):hover {
+    color: var(--text-primary);
+    background-color: var(--bg-surface-hover);
+  }
+}
+
+.filter-segment-btn--active {
+  color: #000000;
+  background-color: var(--primary-accent);
+}
+
+@media (hover: hover) {
+  /* Keep dark text on the accent fill — the plain :hover rule above must not
+     win here, or the label turns accent-on-accent and vanishes. */
+  .filter-segment-btn--active:hover {
+    color: #000000;
+    background-color: var(--primary-accent-dark);
+  }
+}
+
+/* Clear: always present so the row never reflows; dimmed + inert when there's
+   nothing to clear. */
+.filter-clear-btn {
+  height: var(--filter-control-height);
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.filter-clear-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .filter-clear-btn:not(:disabled):hover {
+    color: var(--primary-accent);
+  }
+}
+
+/* Export control: a labelled pill matching the Progress link, with a dropdown. */
+.history-export-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.export-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Keep the spinner/icon from being squeezed when the title crowds the row. */
+.export-btn svg,
+.export-btn .spinner {
+  flex-shrink: 0;
+}
+
+.export-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .export-btn:not(:disabled):hover {
+    color: var(--primary-accent);
+    border-color: var(--primary-accent);
+    background-color: var(--bg-surface-hover);
+  }
+}
+
+/* The dropdown reuses .history-menu; just make it easy to find and full-width
+   items with a little more breathing room than the ⋯ row. */
+.export-menu {
+  min-width: 160px;
+}
+
 .history-card {
   padding: 24px;
   border: 1px solid var(--border-color);
@@ -334,8 +649,10 @@ onUnmounted(() => {
 
 .history-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 8px 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -344,6 +661,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /* Stays hard-right; drops onto its own right-aligned line only when the row
+     genuinely can't fit both groups. */
+  margin-left: auto;
 }
 
 /* Overflow (⋯) menu */
@@ -584,17 +904,17 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.06) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%);
   animation: sk-sheen 1.4s infinite;
 }
 
 @keyframes sk-sheen {
-  100% { transform: translateX(100%); }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* Skeleton exercise groups drop the gold accent stripe that marks a real

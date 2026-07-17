@@ -129,3 +129,62 @@ test('a workout survives its program being deleted and shows as Unknown Day', as
   await expect(card).toContainText('Unknown Day')
   await expect(card).toContainText('Unknown Program')
 })
+
+/**
+ * History filters (ROADMAP 1.12): a program dropdown + date-range presets.
+ *
+ * The worker's account is shared across specs, but a freshly created, uniquely
+ * named program isolates this test's data perfectly: filtering to it can only
+ * ever show the two sessions logged here, so count assertions are safe despite
+ * the shared history. Covers BOTH filter axes in one flow — program, then a date
+ * preset that must drop the deliberately-old session.
+ */
+test('History can be filtered by program and by date range', async ({ page, request, authToken }) => {
+  // Distinctive reps: no other spec logs 91/92, so they identify these sessions.
+  const RECENT_REPS = 91
+  const OLD_REPS = 92
+  const programName = `Filter Program ${Date.now()}`
+
+  const exercise = (await api(request, authToken, 'GET', '/exercises?search=press')).data[0]
+
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: programName,
+    is_active: false,
+    days: [{
+      day_name: `Filter Day ${Date.now()}`,
+      display_order: 1,
+      exercises: [{ exercise_id: exercise.id, target_sets: 1, rest_seconds: 60 }]
+    }]
+  })).data
+  const dayId = program.days[0].id
+
+  // One recent session and one ~200 days old, both on this program.
+  const logSession = (daysAgo, reps) => api(request, authToken, 'POST', '/workout-logs', {
+    client_uuid: crypto.randomUUID(),
+    program_day_id: dayId,
+    date_timestamp: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    ended_at: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    sets: [{ exercise_id: exercise.id, weight: 60, reps, set_type: 'working', set_order: 0 }]
+  })
+  await logSession(1, RECENT_REPS)
+  await logSession(200, OLD_REPS)
+
+  await page.goto('/history')
+
+  const realCards = page.locator('.history-list:not([aria-hidden="true"]) .history-card')
+
+  // Filter to this program — the dropdown option exists once programs load.
+  await expect(page.locator('.filter-select option', { hasText: programName })).toBeAttached()
+  await page.selectOption('.filter-select', { label: programName })
+
+  // Exactly this program's two sessions, nothing from the shared account.
+  await expect(realCards).toHaveCount(2)
+  await expect(realCards.filter({ hasText: `x ${RECENT_REPS}` })).toHaveCount(1)
+  await expect(realCards.filter({ hasText: `x ${OLD_REPS}` })).toHaveCount(1)
+
+  // Now the 90-day preset must drop the ~200-day-old session.
+  await page.locator('.filter-segment-btn', { hasText: '90d' }).click()
+  await expect(realCards).toHaveCount(1)
+  await expect(realCards.filter({ hasText: `x ${RECENT_REPS}` })).toHaveCount(1)
+  await expect(realCards.filter({ hasText: `x ${OLD_REPS}` })).toHaveCount(0)
+})

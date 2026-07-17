@@ -23,6 +23,16 @@
           <span v-else>Sign In</span>
         </PrimaryButton>
 
+        <!--
+          The free-tier API sleeps when idle, so the first login of the day can
+          take 30-50s while the dyno cold-starts. Without this the button just
+          says "Signing in..." and looks hung. Only shown once the request has
+          been in flight past the threshold, so a normal fast login never sees it.
+        -->
+        <p v-if="showWakingHint" class="waking-hint" role="status">
+          Waking up the server — this can take up to a minute on the first visit. Hang tight…
+        </p>
+
         <div style="text-align: center; font-size: 14px; margin-top: 16px; color: var(--text-secondary);">
           Don't have an account? 
           <router-link to="/register" style="color: var(--primary-accent); text-decoration: none; font-weight: 600;">Sign Up</router-link>
@@ -33,21 +43,38 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import PrimaryButton from '@/components/PrimaryButton.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
+// A login still in flight after this long is almost certainly a cold-starting
+// free-tier dyno, not a slow network — that's when the reassurance is worth showing.
+const WAKING_HINT_DELAY_MS = 3000;
+
 const email = ref('');
 const password = ref('');
 const loading = ref(false);
+const showWakingHint = ref(false);
+let wakingHintTimer = null;
 
 const router = useRouter();
 const authStore = useAuthStore();
 
+const clearWakingHint = () => {
+  if (wakingHintTimer) {
+    clearTimeout(wakingHintTimer);
+    wakingHintTimer = null;
+  }
+  showWakingHint.value = false;
+};
+
 const handleLogin = async () => {
   loading.value = true;
+  wakingHintTimer = setTimeout(() => {
+    showWakingHint.value = true;
+  }, WAKING_HINT_DELAY_MS);
   try {
     await authStore.login({ email: email.value, password: password.value });
     router.push('/');
@@ -56,8 +83,12 @@ const handleLogin = async () => {
     // axios interceptor.
   } finally {
     loading.value = false;
+    clearWakingHint();
   }
 };
+
+// Guard against the timer firing after the user navigates away mid-request.
+onUnmounted(clearWakingHint);
 </script>
 
 <style scoped>
@@ -76,5 +107,13 @@ const handleLogin = async () => {
 
 .text-center {
   text-align: center;
+}
+
+.waking-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 </style>
