@@ -85,24 +85,50 @@ function leave(el, done) {
           No days added yet.
         </div>
 
-        <div class="flex-row gap-12 mt-16">
-          <PrimaryButton class="px-16 h-36 program-card-btn" @click="$emit('makeActive', program.id)">Make Active</PrimaryButton>
-          <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="$emit('edit', program.id)">Edit</button>
-          <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="$emit('export', program.id)">Export</button>
-          <!-- Icon, not a 4th text button: the three above are sized to
-               exactly fill a narrow phone (see .program-card-btn). -->
-          <button
-            class="btn-secondary tap-target h-36 program-card-icon-btn"
-            @click="$emit('duplicate', program.id)"
-            :disabled="duplicatingProgramId === program.id"
-            title="Duplicate Program"
-            aria-label="Duplicate program"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        <!-- Two-tier action layout: the hero action (Make Active) gets a
+             full-width primary button on its own, then the three utilities
+             share a row as consistent icon+label buttons. This replaced an
+             earlier single row where Duplicate had to be icon-only just to fit
+             a narrow phone alongside three text buttons. -->
+        <div class="program-card-actions mt-16">
+          <PrimaryButton class="program-card-primary h-36" @click="$emit('makeActive', program.id)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-          </button>
+            <span>Make Active</span>
+          </PrimaryButton>
+
+          <div class="program-card-util-row">
+            <button class="btn-secondary tap-target h-36 program-card-util-btn" @click="$emit('edit', program.id)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              <span>Edit</span>
+            </button>
+
+            <button class="btn-secondary tap-target h-36 program-card-util-btn" @click="$emit('export', program.id)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Export</span>
+            </button>
+
+            <button
+              class="btn-secondary tap-target h-36 program-card-util-btn"
+              @click="$emit('duplicate', program.id)"
+              :disabled="duplicatingProgramId === program.id"
+              aria-label="Duplicate program"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>{{ duplicatingProgramId === program.id ? 'Copying…' : 'Duplicate' }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -157,22 +183,42 @@ function leave(el, done) {
   color: var(--text-secondary);
 }
 
-/* Equal-width actions (Make Active / Edit / Export) so three buttons still fit
-   a narrow phone. */
-.program-card-btn {
+/* Hero + utilities: the primary action stacks above a row of three equal
+   utility buttons. */
+.program-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Make Active spans the full card width and carries a leading check icon. */
+.program-card-primary {
+  width: 100%;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.program-card-util-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+/* Edit / Export / Duplicate: equal thirds, each icon + label so nothing is a
+   mystery icon. Tight horizontal padding keeps the labels on one line at 360px. */
+.program-card-util-btn {
   flex: 1;
+  min-width: 0;
+  gap: 6px;
+  padding-left: 6px;
+  padding-right: 6px;
   font-size: 13px;
 }
 
-/* Duplicate sits in the same row but stays icon-sized: the three buttons above
-   share the remaining width, so it must not claim a quarter of the row. */
-.program-card-icon-btn {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  padding: 0;
+/* Icons must not shrink when a label is long (e.g. "Duplicate"). */
+.program-card-util-btn svg,
+.program-card-primary svg {
+  flex-shrink: 0;
 }
 
 .h-36 {

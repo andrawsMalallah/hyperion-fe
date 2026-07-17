@@ -560,7 +560,10 @@ const handleDeleteProgramConfirm = async () => {
    this gives that a smooth, promoted transform transition. Enter/leave
    cover adding and deleting a day. */
 .days-panel :deep(.day-move) {
-  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Snappy reorder: tall day cards sliding for ~0.4s read as heavy/sluggish, so
+     keep the slide but make it quick and crisp (short duration, ease-out with no
+     overshoot) — the card snaps into place instead of gliding. */
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
 }
 

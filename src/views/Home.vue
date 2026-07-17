@@ -532,7 +532,7 @@ onMounted(() => {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1.6fr 1fr;
+  grid-template-columns: 1.25fr 1fr;
   gap: 24px;
 }
 
@@ -610,8 +610,10 @@ onMounted(() => {
   pointer-events: none;
 }
 
-/* Keyboard focus lands on the hidden input — surface it on the card. */
-.import-Program-card:focus-within {
+/* Surface focus on the card ONLY for keyboard focus (:focus-visible). After a
+   mouse click the hidden file input keeps focus whether a file was picked or the
+   dialog was cancelled, so plain :focus-within would leave the outline stuck. */
+.import-Program-card:has(:focus-visible) {
   outline: 2px solid var(--primary-accent);
   outline-offset: 2px;
 }
