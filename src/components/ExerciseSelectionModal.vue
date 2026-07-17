@@ -3,6 +3,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useExerciseStore } from '../stores/exercise'
 import PrimaryButton from './PrimaryButton.vue'
 import { muscleGroupColor } from '../utils/muscleColors'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 const props = defineProps({
   show: Boolean,
@@ -13,6 +14,8 @@ const emit = defineEmits(['update:show', 'add'])
 
 const exerciseStore = useExerciseStore()
 const selectedExercises = ref(new Set())
+const modalRef = ref(null)
+const titleId = 'exercise-picker-title'
 
 const searchQuery = computed({
   get: () => exerciseStore.searchQuery,
@@ -83,6 +86,10 @@ const clearSearch = () => {
   onSearchInput()
 }
 
+useFocusTrap(() => props.show, modalRef, {
+  onEscape: () => closeModal()
+})
+
 watch(() => props.show, async (newVal) => {
   if (newVal) {
     document.documentElement.classList.add('modal-open')
@@ -105,11 +112,18 @@ onUnmounted(() => {
 <template>
   <Transition name="modal-fade">
     <div v-if="show" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content card">
+      <div
+        ref="modalRef"
+        class="modal-content card"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
+      >
         <div class="modal-header">
-          <h2 class="subtitle">Select Exercises</h2>
-          <button class="close-modal-btn" @click="closeModal" title="Close">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <h2 :id="titleId" class="subtitle">Select Exercises</h2>
+          <button class="close-modal-btn" @click="closeModal" title="Close" aria-label="Close dialog">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
@@ -149,7 +163,10 @@ onUnmounted(() => {
               <TransitionGroup name="list-fade" tag="div">
                 <div v-for="element in visibleExercises" :key="element.id" class="exercise-item selectable-item"
                   :class="{ 'selected': isSelected(element.id) }" @click="toggleExerciseSelection(element.id)">
+                  <!-- The row's click handler is a convenience; the checkbox is what
+                       keyboard users reach, so the name has to live on it too. -->
                   <input type="checkbox" :checked="isSelected(element.id)" class="exercise-checkbox"
+                    :aria-label="element.name"
                     @click.stop="toggleExerciseSelection(element.id)" />
                   <div class="ex-name">{{ element.name }}</div>
                   <div class="ex-badge" :style="{ backgroundColor: getMuscleGroupColor(element.target_muscle_group) }">

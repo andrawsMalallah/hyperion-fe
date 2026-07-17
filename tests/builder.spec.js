@@ -51,3 +51,40 @@ test('a program built in the UI saves and comes back from the server', async ({ 
   expect(saved.days[0].day_name).toBe(DAY_NAME)
   expect(saved.days[0].exercises[0].name).toBe(exerciseName)
 })
+
+// The picker is a hand-rolled overlay rather than an AppModal, so its keyboard
+// behaviour comes from useFocusTrap and nothing else pins it.
+test('the exercise picker traps focus and closes on Escape', async ({ page, request, authToken }) => {
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: 'E2E Picker Program',
+    days: [{ day_name: 'Legs', display_order: 1, exercises: [] }]
+  })).data
+
+  await page.goto(`/builder/${program.id}`)
+
+  const trigger = page.locator('button[title="Add Exercise"]').first()
+  await trigger.click()
+
+  const picker = page.locator('.modal-overlay [role="dialog"]')
+  await expect(picker).toBeVisible()
+  await expect(picker).toHaveAttribute('aria-modal', 'true')
+
+  // Focus must move INTO the dialog on open, not stay on the trigger behind it.
+  await expect(picker.locator('.exercise-item').first()).toBeVisible()
+  expect(await picker.evaluate(el => el.contains(document.activeElement))).toBe(true)
+
+  // Shift+Tab off the top is the case that used to escape: focus starts on the
+  // container, which is tabindex="-1" and so outside the tab cycle.
+  await page.keyboard.press('Shift+Tab')
+  expect(await picker.evaluate(el => el.contains(document.activeElement))).toBe(true)
+
+  // Tabbing forward off the last control wraps back inside rather than leaving.
+  await page.keyboard.press('Tab')
+  expect(await picker.evaluate(el => el.contains(document.activeElement))).toBe(true)
+
+  await page.keyboard.press('Escape')
+  await expect(picker).toBeHidden()
+
+  // Closing hands focus back to what opened it, not to <body>.
+  await expect(trigger).toBeFocused()
+})

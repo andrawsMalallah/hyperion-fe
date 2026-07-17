@@ -1,6 +1,7 @@
 <script setup>
-import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import PrimaryButton from './PrimaryButton.vue'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 const props = defineProps({
   show: Boolean,
@@ -47,58 +48,25 @@ const inputRef = ref(null)
 const modalRef = ref(null)
 const titleId = 'modal-title-' + Math.random().toString(36).slice(2, 8)
 
-// Escape closes; Tab is trapped inside the dialog.
-let lastActiveElement = null
-
-function onKeydown(e) {
-  if (e.key === 'Escape') {
-    e.stopPropagation()
-    onCancel()
-    return
-  }
-  if (e.key === 'Tab' && modalRef.value) {
-    const focusables = modalRef.value.querySelectorAll(
-      'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
-    )
-    if (focusables.length === 0) return
-    const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
-}
+// Escape closes; Tab is trapped inside the dialog. A prompt focuses its input,
+// anything else focuses the dialog itself.
+useFocusTrap(() => props.show, modalRef, {
+  onEscape: () => onCancel(),
+  initialFocus: () => (props.type === 'prompt' ? inputRef.value : null)
+})
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
     document.documentElement.classList.add('modal-open')
     document.body.classList.add('modal-open')
-    document.addEventListener('keydown', onKeydown)
-    lastActiveElement = document.activeElement
     inputValue.value = props.defaultValue
-    nextTick(() => {
-      if (props.type === 'prompt' && inputRef.value) {
-        inputRef.value.focus()
-      } else if (modalRef.value) {
-        modalRef.value.focus()
-      }
-    })
   } else {
     document.documentElement.classList.remove('modal-open')
     document.body.classList.remove('modal-open')
-    document.removeEventListener('keydown', onKeydown)
-    if (lastActiveElement && lastActiveElement.focus) {
-      lastActiveElement.focus()
-    }
   }
 })
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', onKeydown)
   if (props.show) {
     document.documentElement.classList.remove('modal-open')
     document.body.classList.remove('modal-open')
