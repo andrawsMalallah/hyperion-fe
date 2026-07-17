@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Node 22 LTS — satisfies Vite 8's engine requirement
       # (^20.19 || >=22.12). Local dev runs Node 25; bump here to match if a
@@ -45,14 +45,14 @@ jobs:
 
     steps:
       - name: Checkout frontend
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The suite drives the real API, so the backend repo is checked out
       # alongside it. hyperion-be is public, so the default token reads it — no
       # secret needed. (If it ever goes private, this needs a PAT with repo read
       # access passed as `token:`.)
       - name: Checkout backend
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: andrawsMalallah/hyperion-be
           ref: main
