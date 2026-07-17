@@ -196,8 +196,8 @@ onUnmounted(() => {
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
       <BackButton />
       <h1 class="title m-0">Workout History</h1>
-      <router-link to="/progress" class="btn-secondary tap-target no-underline progress-link"
-        style="margin-left: auto; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+      <router-link to="/progress" class="btn-secondary no-underline progress-link"
+        style="margin-left: auto; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
@@ -209,7 +209,7 @@ onUnmounted(() => {
       <!-- Export history (CSV / JSON). Kept reachable when a filter is active so
            the full history can still be exported even if the filter shows none. -->
       <div v-if="pastWorkouts.length > 0 || filtersActive" class="history-export-wrap">
-        <button class="btn-secondary export-btn tap-target" @click.stop="toggleExportMenu"
+        <button class="btn-secondary export-btn" @click.stop="toggleExportMenu"
           :disabled="historyStore.exporting" :aria-expanded="exportMenuOpen" aria-haspopup="true" title="Export history"
           aria-label="Export workout history">
           <div v-if="historyStore.exporting" class="spinner" style="width: 14px; height: 14px; border-width: 2px;">
@@ -598,21 +598,23 @@ onUnmounted(() => {
   }
 }
 
-/* Export control: a labelled pill matching the Progress link, with a dropdown. */
+/* Export control: a labelled pill matching the Progress link (and sized to the
+   32px Back button), with a dropdown. */
 .history-export-wrap {
   position: relative;
   flex-shrink: 0;
 }
 
 .export-btn {
-  padding: 8px 16px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
