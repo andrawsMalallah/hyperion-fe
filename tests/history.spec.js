@@ -34,10 +34,20 @@ test('a workout finished after History was opened appears without a refetch', as
   await page.goto('/')
   await page.click('.nav-item[href="/history"]')
   await page.waitForURL('**/history')
-  // Wait for the fetch to actually land; otherwise the store may not be loaded
-  // yet and the later visit would refetch, hiding a broken prepend.
-  await expect(page.locator('.history-card, .empty-state').first()).toBeVisible()
-  await expect(page.locator('.history-card').first()).not.toContainText(dayName)
+  // Wait for the fetch to actually LAND; otherwise the store isn't loaded, its TTL
+  // hasn't started, and the return trip after the workout would refetch — hiding a
+  // broken prepend. The landed signal must be a *real* card or the empty-state, NOT
+  // the loading skeleton: the skeleton (aria-hidden) also carries `.history-card`,
+  // so keying on `.history-card` alone was racy — it caught a skeleton locally but,
+  // on a fresh empty account (History runs first, no prior workouts), CI resolved
+  // to the empty-state where no card exists and the assertion timed out.
+  await expect(
+    page.locator('.history-list:not([aria-hidden="true"]) .history-card, .empty-state').first()
+  ).toBeVisible()
+  // The day we're about to log must not already be on screen. toHaveCount(0)
+  // tolerates an empty account (zero cards) instead of requiring one to exist,
+  // and is a positive check that this exact session isn't present yet.
+  await expect(page.locator('.history-card', { hasText: dayName })).toHaveCount(0)
 
   // Run the workout, all in-SPA.
   await page.click('.nav-item[href="/"]')
