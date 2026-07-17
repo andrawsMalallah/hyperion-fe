@@ -1895,3 +1895,73 @@ body.modal-open {
 .tt-muted {
   color: var(--text-secondary);
 }
+
+/* ===== Home dashboard card primitives =====================================
+   Shared by the real cards (ProgramShowcase, SavedProgramCard) AND Home's
+   loading skeleton, which deliberately reuses these exact classes so it can't
+   drift from the layout it mirrors. Global rather than scoped because the real
+   cards moved into their own components (S30 split) while the skeleton stayed
+   in Home — scoping them to either side would silently break the other. Same
+   reasoning as the chart primitives above. Component-internal styling
+   (titles, buttons, badges) stays scoped in each component. */
+.active-Program-showcase {
+  border: 1px solid var(--border-color);
+  padding: 24px;
+}
+
+.showcase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.showcase-days-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.showcase-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  padding: 14px 18px;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.showcase-day-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: #444;
+}
+
+.day-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.Program-card {
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 16px;
+}
+
+.Program-card:hover {
+  border-color: #555;
+  background-color: rgba(255, 255, 255, 0.01);
+}
+
+.Program-card.is-expanded {
+  background-color: rgba(255, 255, 255, 0.015);
+  border-color: #444;
+}
+
+.Program-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

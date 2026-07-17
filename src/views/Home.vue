@@ -7,6 +7,8 @@ import { useSyncStore } from '../stores/sync'
 import { useAuthStore } from '../stores/auth'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import AppModal from '../components/AppModal.vue'
+import ProgramShowcase from '../components/ProgramShowcase.vue'
+import SavedProgramCard from '../components/SavedProgramCard.vue'
 
 import { OverlayScrollbars } from 'overlayscrollbars'
 
@@ -61,10 +63,6 @@ function confirmSwitchWorkout() {
 
 function resumeWorkout() {
   router.push(`/workout/${workoutStore.activeWorkoutDayId}`)
-}
-
-function getExerciseCount(day) {
-  return day.exercises.length
 }
 
 const activeProgram = computed(() => programStore.user_programs.find(s => s.is_active))
@@ -155,43 +153,6 @@ async function handleImportFile(event) {
     // Clear the input so re-picking the same file fires change again.
     if (importInput.value) importInput.value.value = ''
   }
-}
-
-// Transition hooks to animate element height dynamically
-function beforeEnter(el) {
-  el.style.height = '0'
-  el.style.opacity = '0'
-  el.style.transform = 'translateY(-8px)'
-  el.style.overflow = 'hidden'
-}
-
-function enter(el, done) {
-  el.offsetHeight // force reflow
-  el.style.transition = 'height 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease, transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-  el.style.height = el.scrollHeight + 'px'
-  el.style.opacity = '1'
-  el.style.transform = 'translateY(0)'
-  el.addEventListener('transitionend', done, { once: true })
-}
-
-function afterEnter(el) {
-  el.style.height = 'auto'
-  el.style.overflow = ''
-  el.style.transition = ''
-}
-
-function beforeLeave(el) {
-  el.style.height = el.scrollHeight + 'px'
-  el.style.overflow = 'hidden'
-  el.offsetHeight // force reflow
-}
-
-function leave(el, done) {
-  el.style.transition = 'height 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.25s ease, transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-  el.style.height = '0'
-  el.style.opacity = '0'
-  el.style.transform = 'translateY(-8px)'
-  el.addEventListener('transitionend', done, { once: true })
 }
 
 onMounted(() => {
@@ -314,65 +275,17 @@ onMounted(() => {
           <h2 class="section-title-small">Active Program</h2>
         </div>
 
-        <div v-if="activeProgram" class="active-Program-showcase card">
-          <div class="showcase-header">
-            <h3 class="showcase-title">{{ activeProgram.name }}</h3>
-            <div class="showcase-header-actions">
-              <button
-                class="btn-secondary tap-target edit-shortcut-btn"
-                @click="programStore.exportProgram(activeProgram.id)"
-                title="Export Program"
-                aria-label="Export program to a file"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-              </button>
-              <button
-                class="btn-secondary tap-target edit-shortcut-btn"
-                @click="duplicateProgram(activeProgram.id)"
-                :disabled="duplicatingProgramId === activeProgram.id"
-                title="Duplicate Program"
-                aria-label="Duplicate program"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-              <button class="btn-secondary tap-target edit-shortcut-btn" @click="editProgram(activeProgram.id)" title="Edit Program" aria-label="Edit program">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="showcase-days-list mt-16">
-            <div v-for="day in getProgramDays(activeProgram.id)" :key="day.id" class="showcase-day-row">
-              <div class="day-details">
-                <span class="showcase-day-name">
-                  {{ day.day_name }}
-                  <span v-if="day.id === nextUpDayId" class="next-up-badge">Up next</span>
-                </span>
-                <span class="showcase-day-exercises">{{ getExerciseCount(day) }} exercises</span>
-              </div>
-              <PrimaryButton class="showcase-start-btn" @click="startWorkout(day.id)">
-                <span>Start</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </PrimaryButton>
-            </div>
-            
-            <div v-if="getProgramDays(activeProgram.id).length === 0" class="empty-state text-center py-16" style="border: 1px dashed var(--border-color); border-radius: 8px;">
-              No days added to this program yet. Click edit shortcut to build it.
-            </div>
-          </div>
-        </div>
+        <ProgramShowcase
+          v-if="activeProgram"
+          :program="activeProgram"
+          :days="getProgramDays(activeProgram.id)"
+          :next-up-day-id="nextUpDayId"
+          :duplicating-program-id="duplicatingProgramId"
+          @start="startWorkout"
+          @export="programStore.exportProgram"
+          @duplicate="duplicateProgram"
+          @edit="editProgram"
+        />
 
         <div v-else class="card empty-active-card text-center py-24">
           <p class="mb-16" style="color: var(--text-secondary);">No Active Programs</p>
@@ -387,60 +300,19 @@ onMounted(() => {
 
         <!-- Scrollable programs List -->
         <TransitionGroup v-if="inactiveprograms.length > 0" name="programs-reorder" tag="div" class="programs-list">
-          <div 
-            v-for="Program in inactiveprograms" 
-            :key="Program.id" 
-            class="Program-card card" 
-            :class="{ 'is-expanded': expandedprogramId === Program.id }" 
-            @click="toggleExpand(Program.id)"
-          >
-            <div class="Program-card-header">
-              <h3 class="Program-title">{{ Program.name }}</h3>
-              <span class="expand-hint">{{ getProgramDays(Program.id).length }} days</span>
-            </div>
-            
-            <Transition
-              name="Program-expand"
-              @before-enter="beforeEnter"
-              @enter="enter"
-              @after-enter="afterEnter"
-              @before-leave="beforeLeave"
-              @leave="leave"
-            >
-              <div v-if="expandedprogramId === Program.id" class="days-list" @click.stop>
-                <div v-for="(day, idx) in getProgramDays(Program.id)" :key="day.id" class="day-row" :style="{ transitionDelay: idx * 40 + 'ms' }">
-                  <div class="day-info">
-                    <span class="day-name">{{ day.day_name }}</span>
-                    <span class="day-exercises">{{ getExerciseCount(day) }} exercises</span>
-                  </div>
-                </div>
-                
-                <div v-if="getProgramDays(Program.id).length === 0" class="empty-state empty-days-hint py-8 text-center" style="border: 1px dashed var(--border-color); border-radius: 8px; font-size: 13px;">
-                  No days added yet.
-                </div>
-                
-                <div class="flex-row gap-12 mt-16">
-                  <PrimaryButton class="px-16 h-36 program-card-btn" @click="makeActive(Program.id)">Make Active</PrimaryButton>
-                  <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="editProgram(Program.id)">Edit</button>
-                  <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="programStore.exportProgram(Program.id)">Export</button>
-                  <!-- Icon, not a 4th text button: the three above are sized to
-                       exactly fill a narrow phone (see .program-card-btn). -->
-                  <button
-                    class="btn-secondary tap-target h-36 program-card-icon-btn"
-                    @click="duplicateProgram(Program.id)"
-                    :disabled="duplicatingProgramId === Program.id"
-                    title="Duplicate Program"
-                    aria-label="Duplicate program"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </Transition>
-          </div>
+          <SavedProgramCard
+            v-for="Program in inactiveprograms"
+            :key="Program.id"
+            :program="Program"
+            :days="getProgramDays(Program.id)"
+            :expanded="expandedprogramId === Program.id"
+            :duplicating-program-id="duplicatingProgramId"
+            @toggle="toggleExpand"
+            @make-active="makeActive"
+            @edit="editProgram"
+            @export="programStore.exportProgram"
+            @duplicate="duplicateProgram"
+          />
         </TransitionGroup>
 
         <!-- Quick Action: Progress -->
@@ -727,48 +599,6 @@ onMounted(() => {
   margin: 0;
 }
 
-.active-Program-showcase {
-  border: 1px solid var(--border-color);
-  padding: 24px;
-}
-
-.showcase-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.showcase-title {
-  font-size: 22px;
-  font-weight: 700;
-  margin: 0;
-  color: var(--primary-accent);
-}
-
-.showcase-header-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-/* Equal-width actions on the inactive program cards (Make Active / Edit /
-   Export) so three buttons still fit a narrow phone. */
-.program-card-btn {
-  flex: 1;
-  font-size: 13px;
-}
-
-/* Duplicate sits in the same row but stays icon-sized: the three buttons above
-   share the remaining width, so it must not claim a quarter of the row. */
-.program-card-icon-btn {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  padding: 0;
-}
-
 /* The file input inside is visually hidden, so the label itself is the target. */
 .import-Program-card {
   cursor: pointer;
@@ -786,174 +616,10 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
-.edit-shortcut-btn {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-  border-radius: 8px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-
-.showcase-days-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.showcase-day-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-color);
-  padding: 14px 18px;
-  border-radius: 10px;
-  transition: all 0.2s ease;
-}
-
-.showcase-day-row:hover {
-  background-color: rgba(255, 255, 255, 0.04);
-  border-color: #444;
-}
-
-.day-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.showcase-day-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.next-up-badge {
-  background-color: rgba(204, 255, 0, 0.12);
-  color: var(--primary-accent);
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.showcase-day-exercises {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.showcase-start-btn {
-  height: 38px !important;
-  min-height: 38px !important;
-  padding: 0 16px !important;
-  font-size: 14px !important;
-  border-radius: 8px !important;
-  display: inline-flex !important;
-  align-items: center;
-  gap: 6px;
-}
-
-.showcase-start-btn svg {
-  transition: transform 0.2s ease;
-}
-
-.showcase-start-btn:hover svg {
-  transform: translateX(2px);
-}
-
 .programs-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.Program-card {
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  padding: 16px;
-}
-
-.Program-card:hover {
-  border-color: #555;
-  background-color: rgba(255, 255, 255, 0.01);
-}
-
-.Program-card.is-expanded {
-  background-color: rgba(255, 255, 255, 0.015);
-  border-color: #444;
-}
-
-.Program-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.Program-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.expand-hint {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.days-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
-}
-
-.day-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.15);
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.day-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.day-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.day-exercises {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.h-36 {
-  height: 36px !important;
-  min-height: 36px !important;
-}
-
-.px-16 {
-  padding-left: 16px !important;
-  padding-right: 16px !important;
 }
 
 .create-Program-card {
