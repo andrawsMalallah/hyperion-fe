@@ -39,6 +39,40 @@ test('registering lands on the verification screen, not the app', async ({ page 
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible()
 })
 
+test('a filled honeypot blocks registration', async ({ page }) => {
+  // The test above is the other half of this pair: it drives the real form with
+  // the honeypot left empty, so it fails if the trap ever catches real people.
+  await page.goto('/register')
+  await page.fill('#name', 'Spam Bot')
+  await page.fill('#email', `e2e-bot-${Date.now()}@example.test`)
+  await page.fill('#password', REGISTER_PASSWORD)
+  await page.fill('#password_confirmation', REGISTER_PASSWORD)
+
+  // Set it the way automation would — the field is off-screen, so a normal
+  // fill() isn't representative. The input event is what v-model listens for.
+  await page.locator('#website').evaluate(el => {
+    el.value = 'http://spam.example.com'
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+
+  await page.click('button[type=submit]')
+
+  await expect(page.getByText('Registration could not be completed.')).toBeVisible()
+  await expect(page).toHaveURL(/\/register$/)
+})
+
+test('the honeypot is hidden from assistive tech and the keyboard', async ({ page }) => {
+  await page.goto('/register')
+
+  // If either of these regresses, the trap starts catching real people: a
+  // screen-reader user would be told to fill it in, or Tab would land on it.
+  await expect(page.locator('.honeypot-field')).toHaveAttribute('aria-hidden', 'true')
+  await expect(page.locator('#website')).toHaveAttribute('tabindex', '-1')
+
+  // It must also never be a required field, or the form can't submit empty.
+  await expect(page.locator('#website')).not.toHaveAttribute('required', /.*/)
+})
+
 test('forgot password accepts an email address', async ({ page }) => {
   const account = mintUser()
 

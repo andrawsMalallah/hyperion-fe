@@ -23,7 +23,17 @@
           <label for="password_confirmation" style="font-weight: 600; font-size: 14px;">Confirm Password</label>
           <PasswordInput id="password_confirmation" v-model="password_confirmation" required minlength="8" autocomplete="new-password" />
         </div>
-        
+
+        <!-- Honeypot: a field people never see but naive bots fill in, checked
+             server-side in RegisterRequest. Moved off-screen rather than
+             display:none so a form-filling bot still finds it; aria-hidden and
+             tabindex="-1" keep it out of the keyboard order and the screen-reader
+             tree. Never mark it required — the form must submit with it empty. -->
+        <div class="honeypot-field" aria-hidden="true">
+          <label for="website">Website</label>
+          <input type="text" id="website" v-model="website" tabindex="-1" autocomplete="off">
+        </div>
+
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
           <span v-if="loading">Signing up...</span>
           <span v-else>Sign Up</span>
@@ -50,6 +60,8 @@ const name = ref('');
 const email = ref('');
 const password = ref('');
 const password_confirmation = ref('');
+// Honeypot — stays empty for real people; see the field in the template.
+const website = ref('');
 const loading = ref(false);
 
 const router = useRouter();
@@ -69,7 +81,8 @@ const handleRegister = async () => {
       name: name.value,
       email: email.value,
       password: password.value,
-      password_confirmation: password_confirmation.value
+      password_confirmation: password_confirmation.value,
+      website: website.value
     });
     router.push('/');
   } catch {
@@ -96,5 +109,16 @@ const handleRegister = async () => {
 
 .text-center {
   text-align: center;
+}
+
+/* Off-screen rather than display:none or hidden — a bot that skips undisplayed
+   inputs should still fill this one. Not announced (aria-hidden on the wrapper)
+   and not tabbable (tabindex="-1" on the input). */
+.honeypot-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
 }
 </style>
