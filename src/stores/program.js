@@ -331,6 +331,27 @@ export const useProgramStore = defineStore('program', () => {
     useToastStore().success('Program exported.')
   }
 
+  // Copy one of the user's own programs as a starting point for a variation.
+  // The server does the deep copy (days + prescriptions) and returns the new
+  // program, which ingestProgram drops straight into local state so it shows up
+  // without waiting for the list cache to revalidate. The copy lands private and
+  // inactive, so this never unseats the program they're currently training.
+  async function duplicateProgram(programId) {
+    const toast = useToastStore()
+
+    try {
+      const response = await api.post(`/programs/${programId}/duplicate`, {}, { suppressErrorToast: true })
+      const copy = response.data.data
+      ingestProgram(copy)
+      toast.success(`"${copy.name}" created.`)
+      return copy
+    } catch (e) {
+      console.error(e)
+      toast.error('Could not duplicate the program.')
+      return null
+    }
+  }
+
   // Create a program from a file the user picked. The server resolves exercise
   // names against the catalog and rejects anything it can't match, so a bad file
   // surfaces as a validation message rather than a half-built program.
@@ -411,6 +432,7 @@ export const useProgramStore = defineStore('program', () => {
     syncProgramDays,
     exportProgram,
     importProgram,
+    duplicateProgram,
     ingestProgram,
     reset
   }

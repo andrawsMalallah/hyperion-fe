@@ -122,6 +122,22 @@ function editProgram(programId) {
   router.push(`/builder/${programId}`)
 }
 
+// Copy a program the user owns. The store does the request and the toasts; the
+// id here only disables the button that was clicked, so a double-tap on a slow
+// connection can't create two copies.
+const duplicatingProgramId = ref(null)
+
+async function duplicateProgram(programId) {
+  if (duplicatingProgramId.value) return
+  duplicatingProgramId.value = programId
+
+  try {
+    await programStore.duplicateProgram(programId)
+  } finally {
+    duplicatingProgramId.value = null
+  }
+}
+
 // Program file import. The store handles parsing, the request and the toasts;
 // this only drives the input and the button's busy state.
 const importInput = ref(null)
@@ -314,6 +330,18 @@ onMounted(() => {
                   <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
               </button>
+              <button
+                class="btn-secondary tap-target edit-shortcut-btn"
+                @click="duplicateProgram(activeProgram.id)"
+                :disabled="duplicatingProgramId === activeProgram.id"
+                title="Duplicate Program"
+                aria-label="Duplicate program"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
               <button class="btn-secondary tap-target edit-shortcut-btn" @click="editProgram(activeProgram.id)" title="Edit Program" aria-label="Edit program">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -395,6 +423,20 @@ onMounted(() => {
                   <PrimaryButton class="px-16 h-36 program-card-btn" @click="makeActive(Program.id)">Make Active</PrimaryButton>
                   <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="editProgram(Program.id)">Edit</button>
                   <button class="btn-secondary tap-target px-16 h-36 program-card-btn" @click="programStore.exportProgram(Program.id)">Export</button>
+                  <!-- Icon, not a 4th text button: the three above are sized to
+                       exactly fill a narrow phone (see .program-card-btn). -->
+                  <button
+                    class="btn-secondary tap-target h-36 program-card-icon-btn"
+                    @click="duplicateProgram(Program.id)"
+                    :disabled="duplicatingProgramId === Program.id"
+                    title="Duplicate Program"
+                    aria-label="Duplicate program"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </Transition>
@@ -714,6 +756,17 @@ onMounted(() => {
 .program-card-btn {
   flex: 1;
   font-size: 13px;
+}
+
+/* Duplicate sits in the same row but stays icon-sized: the three buttons above
+   share the remaining width, so it must not claim a quarter of the row. */
+.program-card-icon-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding: 0;
 }
 
 /* The file input inside is visually hidden, so the label itself is the target. */
