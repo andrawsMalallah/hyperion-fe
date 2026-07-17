@@ -8,6 +8,9 @@ import { useToastStore } from '../stores/toast'
 import { useHistoryStore } from '../stores/history'
 import { useSyncStore } from '../stores/sync'
 import AppModal from '../components/AppModal.vue'
+import ExerciseHistoryModal from '../components/ExerciseHistoryModal.vue'
+import WorkoutSummaryModal from '../components/WorkoutSummaryModal.vue'
+import SetRow from '../components/SetRow.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import { toKg, formatWeight } from '../utils/units'
 import {
@@ -20,7 +23,6 @@ import {
   groupLetter,
   isLastOfGroup
 } from '../utils/grouping'
-import api from '../api'
 
 const props = defineProps({
   dayId: String
@@ -250,62 +252,13 @@ function editSet(exIndex, setIndex) {
   }
 }
 
-// Exercise History Modal — loads that exercise's sessions 5 at a time,
-// paginated on scroll, rather than reading the whole workout history.
+// Exercise History Modal — the modal owns its own fetching and pagination.
 const showExHistoryModal = ref(false)
 const selectedExForHistory = ref(null)
-const exHistoryLogs = ref([])
-const exHistoryPage = ref(0)
-const exHistoryLastPage = ref(1)
-const loadingHistory = ref(false)      // first page
-const loadingMoreHistory = ref(false)  // subsequent pages
 
 function openExHistory(ex) {
   selectedExForHistory.value = ex
   showExHistoryModal.value = true
-  exHistoryLogs.value = []
-  exHistoryPage.value = 0
-  exHistoryLastPage.value = 1
-  loadExerciseHistory()
-}
-
-async function loadExerciseHistory() {
-  if (loadingHistory.value || loadingMoreHistory.value) return
-  const nextPage = exHistoryPage.value + 1
-  if (nextPage > exHistoryLastPage.value && exHistoryPage.value !== 0) return
-
-  const firstLoad = nextPage === 1
-  if (firstLoad) loadingHistory.value = true
-  else loadingMoreHistory.value = true
-
-  try {
-    const res = await api.get(`/exercises/${selectedExForHistory.value.id}/logs`, {
-      params: { page: nextPage }
-    })
-    const mapped = res.data.data.map(log => ({
-      logId: log.id,
-      date: new Date(log.date_timestamp).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      }),
-      sets: log.sets
-    }))
-    exHistoryLogs.value = firstLoad ? mapped : [...exHistoryLogs.value, ...mapped]
-    exHistoryPage.value = res.data.meta?.current_page || nextPage
-    exHistoryLastPage.value = res.data.meta?.last_page || nextPage
-  } catch (e) {
-    console.error('Failed to load exercise history:', e)
-  } finally {
-    loadingHistory.value = false
-    loadingMoreHistory.value = false
-  }
-}
-
-function onHistoryScroll(e) {
-  const el = e.target
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) {
-    if (exHistoryPage.value < exHistoryLastPage.value) loadExerciseHistory()
-  }
 }
 
 const showLeaveModal = ref(false)
@@ -320,23 +273,6 @@ const savedSummary = ref(null)
 // Session notes typed into the summary modal. The workout is already saved by
 // the time the modal shows, so notes are attached as a follow-up on dismissal.
 const sessionNotes = ref('')
-
-// Duration as "1h 12m" / "34m" / "45s".
-function formatDuration(ms) {
-  const totalSec = Math.round((ms || 0) / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m`
-  return `${s}s`
-}
-
-// Total volume in the user's unit, compactly (e.g. "12,340 kg").
-function formatVolume(volumeKg) {
-  const v = Math.round(Number(formatWeight(volumeKg, workoutStore.weightUnit)))
-  return `${v.toLocaleString()} ${workoutStore.weightUnit}`
-}
 
 // The workout is already saved by the time this modal shows, so any dismissal
 // (Go Home, Escape, or backdrop) routes home. Guarded against a double push.
@@ -525,94 +461,17 @@ async function saveWorkout() {
           </div>
           
           <TransitionGroup name="list-fade" tag="div" class="sets-list-container">
-            <div v-for="(s, setIndex) in ex.sets" :key="s.localId" class="set-row" :class="{ 'is-completed': s.completed, 'is-warmup': s.set_type === 'warmup' }">
-              <button
-                class="set-col num-col warmup-toggle"
-                :class="{ 'warmup-toggle--on': s.set_type === 'warmup' }"
-                :disabled="s.completed"
-                @click="toggleWarmup(s)"
-                :title="s.set_type === 'warmup' ? 'Warm-up set (tap for working set)' : 'Tap to mark as warm-up set'"
-                :aria-label="`Set ${setIndex + 1}: toggle warm-up`"
-              >
-                {{ s.set_type === 'warmup' ? 'W' : setIndex + 1 }}
-              </button>
-              <div class="set-col">
-                <input
-                  type="number"
-                  inputmode="decimal"
-                  class="input-large set-input"
-                  v-model="s.weight"
-                  :placeholder="workoutStore.weightUnit"
-                  :aria-label="`Set ${setIndex + 1} weight (${workoutStore.weightUnit})`"
-                  min="0"
-                  :disabled="s.completed"
-                />
-              </div>
-              <div class="set-col">
-                <input
-                  type="number"
-                  inputmode="numeric"
-                  class="input-large set-input"
-                  v-model="s.reps"
-                  placeholder="Reps"
-                  :aria-label="`Set ${setIndex + 1} reps`"
-                  min="1"
-                  :disabled="s.completed"
-                />
-              </div>
-              <div class="set-col rpe-col">
-                <input
-                  type="number"
-                  inputmode="numeric"
-                  class="input-large set-input"
-                  v-model="s.rpe"
-                  placeholder="RPE"
-                  :aria-label="`Set ${setIndex + 1} RPE (optional, 1-10)`"
-                  min="1"
-                  max="10"
-                  :disabled="s.completed"
-                />
-              </div>
-              <div class="set-col action-col flex-row action-col-flex">
-                <!-- Edit Button -->
-                <PrimaryButton 
-                  v-if="s.completed" 
-                  class="btn-set-action" 
-                  @click="editSet(exIndex, setIndex)" 
-                  title="Edit Set"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                </PrimaryButton>
-
-                <!-- Save Button -->
-                <PrimaryButton 
-                  v-else 
-                  class="save-set-btn btn-set-action" 
-                  :disabled="s.weight === '' || s.weight === null || s.weight === undefined || s.weight < 0 || s.reps === '' || s.reps === null || s.reps === undefined || s.reps < 1"
-                  @click="saveSet(exIndex, setIndex)" 
-                  title="Save Set"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </PrimaryButton>
-
-                <!-- Delete Button -->
-                <button 
-                  class="btn-danger tap-target remove-set-btn btn-set-action" 
-                  @click="removeSet(exIndex, setIndex)" 
-                  title="Remove Set"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <SetRow
+              v-for="(s, setIndex) in ex.sets"
+              :key="s.localId"
+              :set="s"
+              :index="setIndex"
+              :weight-unit="workoutStore.weightUnit"
+              @toggle-warmup="toggleWarmup(s)"
+              @save="saveSet(exIndex, setIndex)"
+              @edit="editSet(exIndex, setIndex)"
+              @remove="removeSet(exIndex, setIndex)"
+            />
           </TransitionGroup>
 
           </div>
@@ -641,58 +500,14 @@ async function saveWorkout() {
       </div>
     </Transition>
 
-    <!-- Post-save Summary Modal — doubles as the celebration/reward screen. -->
-    <AppModal
+    <!-- Post-save summary — doubles as the celebration/reward screen. -->
+    <WorkoutSummaryModal
       :show="showSavedModal"
-      :title="savedOffline ? 'Saved Offline' : 'Workout Complete'"
-      confirm-text="Go Home"
-      hide-cancel
-      @confirm="goHome"
-      @update:show="(v) => { if (!v) goHome() }"
-    >
-      <div class="ws-summary" v-if="savedSummary">
-        <p v-if="savedOffline" class="ws-offline-note">
-          Saved offline — it'll sync automatically when you're back online.
-        </p>
-
-        <div class="ws-stats">
-          <div class="ws-stat">
-            <span class="ws-stat-value">{{ formatDuration(savedSummary.durationMs) }}</span>
-            <span class="ws-stat-label">Duration</span>
-          </div>
-          <div class="ws-stat">
-            <span class="ws-stat-value">{{ savedSummary.sets }}</span>
-            <span class="ws-stat-label">Sets</span>
-          </div>
-          <div class="ws-stat">
-            <span class="ws-stat-value">{{ formatVolume(savedSummary.volume) }}</span>
-            <span class="ws-stat-label">Volume</span>
-          </div>
-        </div>
-
-        <div v-if="savedSummary.prs && savedSummary.prs.length" class="ws-prs">
-          <div class="ws-prs-title">🎉 New personal records</div>
-          <ul class="ws-pr-list">
-            <li v-for="pr in savedSummary.prs" :key="pr.exercise_id" class="ws-pr-item">
-              <span class="ws-pr-name">{{ pr.exerciseName }}</span>
-              <span class="ws-pr-lift">{{ formatWeight(pr.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} × {{ pr.reps }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="ws-notes">
-          <label for="ws-notes-input" class="ws-notes-label">Notes (optional)</label>
-          <textarea
-            id="ws-notes-input"
-            v-model="sessionNotes"
-            class="ws-notes-input"
-            rows="3"
-            maxlength="1000"
-            placeholder="How did it go? Aches, PRs, form cues…"
-          ></textarea>
-        </div>
-      </div>
-    </AppModal>
+      :summary="savedSummary"
+      :offline="savedOffline"
+      v-model:notes="sessionNotes"
+      @dismiss="goHome"
+    />
 
     <!-- Unsaved Changes Modal -->
     <AppModal
@@ -704,44 +519,7 @@ async function saveWorkout() {
       @confirm="confirmLeave" 
     />
 
-    <!-- Exercise History Modal -->
-    <AppModal
-      v-model:show="showExHistoryModal"
-      :title="(selectedExForHistory?.exercise?.name || '') + ' History'"
-      confirm-text="Close"
-      hide-cancel
-      max-width="500px"
-    >
-      <div class="history-list-container mb-16" @scroll="onHistoryScroll">
-        <div v-if="loadingHistory" class="spinner-container py-24 text-center">
-          <div class="spinner spinner-centered"></div>
-        </div>
-        <div v-else-if="exHistoryLogs.length === 0" class="empty-state py-24 text-center">
-          No history yet for this exercise.
-        </div>
-        <div v-else class="history-grid">
-          <div v-for="entry in exHistoryLogs" :key="entry.logId" class="history-log-row">
-            <div class="history-log-date">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
-              {{ entry.date }}
-            </div>
-            <div class="history-sets-grid">
-              <div v-for="(set, sIdx) in entry.sets" :key="set.id" class="history-set-badge">
-                <span class="history-set-badge-title">Set {{ sIdx + 1 }}:</span> {{ formatWeight(set.weight, workoutStore.weightUnit) }}{{ workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template>
-              </div>
-            </div>
-          </div>
-          <div v-if="loadingMoreHistory" class="spinner-container py-12 text-center">
-            <div class="spinner spinner-centered"></div>
-          </div>
-        </div>
-      </div>
-    </AppModal>
+    <ExerciseHistoryModal v-model:show="showExHistoryModal" :exercise="selectedExForHistory" />
   </div>
 </template>
 
@@ -850,172 +628,4 @@ async function saveWorkout() {
   letter-spacing: 0.5px;
 }
 
-.warmup-toggle {
-  background: none;
-  border: 1px dashed transparent;
-  border-radius: 6px;
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 4px 0;
-}
-
-.warmup-toggle:not(:disabled):hover {
-  border-color: var(--border-color);
-}
-
-.warmup-toggle--on {
-  color: #f9ca24;
-}
-
-.set-row.is-warmup .set-input {
-  opacity: 0.85;
-}
-
-/* ---- Post-save workout summary ---- */
-.ws-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.ws-offline-note {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-.ws-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.ws-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 14px 8px;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.ws-stat-value {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-primary, #fff);
-  line-height: 1.1;
-}
-
-.ws-stat-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-}
-
-.ws-prs {
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-surface);
-}
-
-.ws-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ws-notes-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-}
-
-.ws-notes-input {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  min-height: 68px;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.4;
-  color: var(--text-primary);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-}
-
-.ws-notes-input:focus {
-  outline: none;
-  border-color: var(--primary-accent);
-}
-
-.ws-notes-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.ws-prs-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--primary-accent);
-  margin-bottom: 12px;
-}
-
-.ws-pr-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ws-pr-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.ws-pr-name {
-  font-size: 14px;
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ws-pr-lift {
-  flex: 0 0 auto;
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--primary-accent);
-  white-space: nowrap;
-}
-
-@media (max-width: 340px) {
-  .ws-stat-value {
-    font-size: 16px;
-  }
-  .ws-stat {
-    padding: 12px 4px;
-  }
-}
 </style>
