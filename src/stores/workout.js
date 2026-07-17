@@ -113,12 +113,7 @@ export const useWorkoutStore = defineStore('workout', () => {
 
     try {
       const response = await api.post('/workout-logs', payload)
-      // Only prepend to an already-loaded history list; if History hasn't been
-      // opened yet it will fetch fresh from the server (prepending here would
-      // duplicate the entry once that fetch appends page 1).
-      if (response.data && response.data.data && historyStore.isLoaded) {
-        historyStore.workout_logs.unshift(response.data.data)
-      }
+      historyStore.prependLog(response.data?.data)
       markDayPerformed(payload.program_day_id, payload.ended_at)
       clearActiveWorkout()
       stopRestTimer()

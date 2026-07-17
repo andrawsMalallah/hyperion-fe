@@ -56,6 +56,26 @@ export const useHistoryStore = defineStore('history', () => {
     }
   }
 
+  // Put a just-saved workout at the top of the list, so History reflects it
+  // without a refetch. Shared by the online finish path (workout store) and the
+  // offline outbox drain (sync store) — the two ways a log gets created.
+  //
+  // Only touches an ALREADY-LOADED list: if History hasn't been opened yet it
+  // fetches fresh on first visit, and prepending now would duplicate the entry
+  // once that fetch appends page 1.
+  //
+  // The client_uuid check is what makes this safe for the outbox: a retry of a
+  // payload the server already stored comes back as the existing log, which may
+  // already be sitting in the list.
+  function prependLog(saved) {
+    if (!saved || !isLoaded.value) return false
+    const duplicate = saved.client_uuid &&
+      workout_logs.value.some(l => l.client_uuid === saved.client_uuid)
+    if (duplicate) return false
+    workout_logs.value.unshift(saved)
+    return true
+  }
+
   // Delete a logged workout. Removes it from the local list on success so the
   // History view updates without a refetch. Server-side best_e1rm recomputes on
   // the next recent-sets call, so PR data self-corrects.
@@ -94,6 +114,7 @@ export const useHistoryStore = defineStore('history', () => {
     loadFailed,
     isLoaded,
     fetchHistory,
+    prependLog,
     deleteWorkout,
     updateWorkout,
     reset

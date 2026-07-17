@@ -79,14 +79,7 @@ export const useSyncStore = defineStore('sync', () => {
         const { _user_id, ...payload } = item
         try {
           const response = await api.post('/workout-logs', payload, { suppressErrorToast: true })
-          const saved = response.data && response.data.data
-          // Only touch an already-loaded history list; otherwise the next
-          // History visit fetches fresh (see workout store note).
-          if (saved && historyStore.isLoaded) {
-            const already = saved.client_uuid &&
-              historyStore.workout_logs.some(l => l.client_uuid === saved.client_uuid)
-            if (!already) historyStore.workout_logs.unshift(saved)
-          }
+          historyStore.prependLog(response.data?.data)
           removeFromQueue(item)
           synced++
         } catch (e) {

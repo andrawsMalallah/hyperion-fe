@@ -6,6 +6,11 @@ import { test, expect, api, mintUser } from './support/auth.js'
 
 // Unique per run: the catalog is shared and search must find exactly this one.
 const PROGRAM_NAME = `E2E Public Program ${Date.now()}`
+// A second public program that the search must FILTER OUT. Without it the
+// search assertion is vacuous: both programs are freshly created, so they sit on
+// Discover's first page unfiltered and the target is found whether the search
+// fires or not (confirmed — this spec passed with the debounce fully disabled).
+const DECOY_NAME = `E2E Decoy Program ${Date.now()}`
 
 test('a public program from another user can be found and cloned', async ({ page, request, authToken }) => {
   // A second account publishes a program.
@@ -21,12 +26,27 @@ test('a public program from another user can be found and cloned', async ({ page
     }]
   })
 
+  await api(request, author.token, 'POST', '/programs', {
+    name: DECOY_NAME,
+    is_public: true,
+    days: [{
+      day_name: 'Decoy Day',
+      display_order: 1,
+      exercises: [{ exercise_id: catalog[0].id, target_sets: 3 }]
+    }]
+  })
+
   // The logged-in user finds it in Discover.
   await page.goto('/discover')
+  const decoy = page.locator('.discover-Program-card').filter({ hasText: DECOY_NAME })
+  await expect(decoy).toHaveCount(1)
+
   await page.locator('.search-bar-input').fill(PROGRAM_NAME)
 
   const card = page.locator('.discover-Program-card').filter({ hasText: PROGRAM_NAME })
   await expect(card).toHaveCount(1)
+  // The debounced search really queried the server: the decoy is gone.
+  await expect(decoy).toHaveCount(0)
   await expect(card).toContainText(`by ${author.user.name}`)
 
   // Open the detail modal and save it.

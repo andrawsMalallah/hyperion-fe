@@ -189,6 +189,60 @@ test('the page stays scroll-locked when one of two stacked modals closes', async
   await expect(page.locator('body')).not.toHaveClass(/modal-open/)
 })
 
+/**
+ * Regression: adding an exercise AFTER SEARCHING blanked every day in the
+ * builder (reported live, introduced in S26 by 7f0583e).
+ *
+ * The builder renders each day by looking its exercise ids up in the exercise
+ * store's global `exercises` dictionary. Closing the picker with a search active
+ * called exerciseStore.reset(), which S26 had turned into the LOGOUT teardown —
+ * it wipes that dictionary, so every lookup missed and every day rendered empty.
+ *
+ * Searching is the trigger, which is why no existing spec caught it: they all
+ * pick the first row off the unfiltered list, leaving searchQuery === ''.
+ */
+test('adding an exercise via search keeps every day rendered', async ({ page, request, authToken }) => {
+  const catalog = (await api(request, authToken, 'GET', '/exercises?per_page=30')).data
+  const dayOneExercise = catalog[0]
+  const dayTwoExercise = catalog[1]
+  // The one we'll go find by typing — the search is the whole point.
+  const searched = catalog[2]
+
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: 'E2E Search Blank Program',
+    days: [
+      { day_name: 'Search Day One', display_order: 1, exercises: [{ exercise_id: dayOneExercise.id }] },
+      { day_name: 'Search Day Two', display_order: 2, exercises: [{ exercise_id: dayTwoExercise.id }] }
+    ]
+  })).data
+
+  await page.goto(`/builder/${program.id}`)
+
+  const dayOne = page.locator('.day-card').nth(0)
+  const dayTwo = page.locator('.day-card').nth(1)
+  await expect(dayOne).toContainText(dayOneExercise.name)
+  await expect(dayTwo).toContainText(dayTwoExercise.name)
+
+  // Add to day one, by searching rather than taking the first row.
+  await dayOne.locator('button[title="Add Exercise"]').click()
+  const picker = page.locator('.modal-overlay')
+  await expect(picker).toBeVisible()
+  await picker.locator('.search-bar-input').fill(searched.name)
+
+  // .selectable-item, not .exercise-item: the loading skeletons reuse the latter,
+  // so a click can land on a skeleton and select nothing.
+  const match = picker.locator('.selectable-item').filter({ hasText: searched.name }).first()
+  await expect(match).toBeVisible()
+  await match.click()
+  await picker.getByRole('button', { name: /Add Selected/ }).click()
+  await expect(picker).toBeHidden()
+
+  // The bug: BOTH days went blank here, including the untouched one.
+  await expect(dayOne).toContainText(searched.name)
+  await expect(dayOne).toContainText(dayOneExercise.name)
+  await expect(dayTwo).toContainText(dayTwoExercise.name)
+})
+
 // The picker is a hand-rolled overlay rather than an AppModal, so its keyboard
 // behaviour comes from useFocusTrap and nothing else pins it.
 test('the exercise picker traps focus and closes on Escape', async ({ page, request, authToken }) => {

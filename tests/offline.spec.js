@@ -46,7 +46,12 @@ test('a workout finished offline queues locally and syncs on reconnect', async (
   await expect(page.locator('.sync-banner')).toHaveCount(0, { timeout: 15000 })
 
   // Now it's on the server and in History.
+  // Scoped to the newest card: the worker's account is shared across spec files
+  // (see support/auth.js), so an unscoped count picks up other specs' workouts.
+  // This counted globally until history.spec.js started logging a session ahead
+  // of it — it had only ever passed by being the first spec to log a workout.
   await page.goto('/history')
-  await expect(page.locator('.history-card').first()).toContainText('Push')
-  await expect(page.locator('.history-set-pill')).toHaveCount(1)
+  const syncedSession = page.locator('.history-card').first()
+  await expect(syncedSession).toContainText('Push')
+  await expect(syncedSession.locator('.history-set-pill')).toHaveCount(1)
 })

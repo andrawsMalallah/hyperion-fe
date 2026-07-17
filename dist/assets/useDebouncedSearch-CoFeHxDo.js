@@ -1,0 +1,1 @@
+import{O as e}from"./_plugin-vue_export-helper-BwKYbxzH.js";function t(t,n,{delay:r=350,minLength:i=2}={}){let a=null;function o(){clearTimeout(a),a=null}function s(){o();let e=t().trim();e.length>0&&e.length<i||(a=setTimeout(()=>{a=null,n()},r))}return e(o),{onSearchInput:s,cancel:o}}export{t};

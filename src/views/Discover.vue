@@ -5,6 +5,7 @@ import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
 import AppModal from '../components/AppModal.vue'
 import BackButton from '../components/BackButton.vue'
+import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 
 const discoverStore = useDiscoverStore()
 const toast = useToastStore()
@@ -28,24 +29,19 @@ const cloning = ref(false)
 const loaderRef = ref(null)
 let observer = null
 
-let searchTimeout = null
-
 async function fetchPrograms(reset = false, isScroll = false) {
   await discoverStore.fetchDiscoverPrograms(reset, isScroll)
 }
 
-function onSearchInput() {
-  clearTimeout(searchTimeout)
-  const query = searchQuery.value.trim()
-  if (query.length > 0 && query.length < 2) {
-    return
-  }
-  searchTimeout = setTimeout(() => {
-    fetchPrograms(true, false)
-  }, 350)
-}
+const { onSearchInput, cancel: cancelSearch } = useDebouncedSearch(
+  () => searchQuery.value,
+  () => fetchPrograms(true, false)
+)
 
 function clearSearch() {
+  // Clearing searches now, so drop the keystroke's pending one — otherwise it
+  // fires a second, identical fetch 350ms later.
+  cancelSearch()
   searchQuery.value = ''
   fetchPrograms(true, false)
 }
@@ -99,7 +95,7 @@ onUnmounted(() => {
   if (observer) {
     observer.disconnect()
   }
-  clearTimeout(searchTimeout)
+  // The pending search timer is useDebouncedSearch's to cancel on unmount.
   // A leftover query would silently filter the next visit's results.
   discoverStore.searchQuery = ''
   // The detail modal's scroll lock is AppModal's to release (useModalLock),

@@ -5,6 +5,7 @@ import PrimaryButton from './PrimaryButton.vue'
 import { muscleGroupColor } from '../utils/muscleColors'
 import { useFocusTrap } from '../composables/useFocusTrap'
 import { useModalLock } from '../composables/useModalLock'
+import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 
 const props = defineProps({
   show: Boolean,
@@ -51,9 +52,12 @@ const addSelectedExercises = () => {
 const closeModal = () => {
   emit('update:show', false)
   selectedExercises.value = new Set()
+  // Drop the search so the picker reopens unfiltered. resetCatalog(), NOT
+  // reset(): reset() is the logout teardown and wipes the exercise dictionary
+  // the builder renders its days from, which blanked every day on close.
   if (searchQuery.value !== '') {
     searchQuery.value = ''
-    exerciseStore.reset()
+    exerciseStore.resetCatalog()
   }
 }
 
@@ -70,17 +74,10 @@ function handleScroll(e) {
   }
 }
 
-let searchTimeout = null
-function onSearchInput() {
-  clearTimeout(searchTimeout)
-  const query = searchQuery.value.trim()
-  if (query.length > 0 && query.length < 2) {
-    return
-  }
-  searchTimeout = setTimeout(() => {
-    exerciseStore.fetchExercises(true, false)
-  }, 350)
-}
+const { onSearchInput } = useDebouncedSearch(
+  () => searchQuery.value,
+  () => exerciseStore.fetchExercises(true, false)
+)
 
 const clearSearch = () => {
   searchQuery.value = ''

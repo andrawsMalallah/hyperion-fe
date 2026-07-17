@@ -79,16 +79,32 @@ export const useExerciseStore = defineStore('exercise', () => {
     }
   }
 
-  const reset = () => {
-    // Clear the dictionary too: it can hold exercises merged from the previous
-    // account's program days (including their pending contributions), which
-    // must not leak into whoever logs in next on this device.
-    exercises.value = []
+  // Clear the SEARCH state only, so the picker reopens on a clean, unfiltered
+  // first page.
+  //
+  // ⚠️ Deliberately leaves `exercises` (the dictionary) alone — see its comment
+  // above: never cleared on search. Every background view resolves exercise ids
+  // through it (the builder's day lists, ActiveWorkout, PR names), so wiping it
+  // here blanks them all. That is exactly the bug this split fixes: the picker
+  // called reset() on close-after-search, and S26 had quietly turned reset()
+  // into the logout teardown.
+  const resetCatalog = () => {
     catalog.value = []
     isLoaded.value = false
     exercisePage.value = 1
     exerciseHasMore.value = true
     searchQuery.value = ''
+  }
+
+  // Full teardown — logout / account switch ONLY (resetAllStores).
+  //
+  // Clearing the dictionary is the point: it can hold exercises merged from the
+  // previous account's program days (including their pending contributions),
+  // which must not leak into whoever logs in next on this device. Anything that
+  // is not a session teardown wants resetCatalog() instead.
+  const reset = () => {
+    exercises.value = []
+    resetCatalog()
   }
 
   return {
@@ -100,6 +116,7 @@ export const useExerciseStore = defineStore('exercise', () => {
     exerciseHasMore,
     searchQuery,
     fetchExercises,
+    resetCatalog,
     reset
   }
 })
