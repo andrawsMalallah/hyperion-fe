@@ -47,10 +47,13 @@ test('log a prescribed workout end-to-end', async ({ page, request, authToken })
   await page.click('.rest-timer-overlay >> text=Skip')
   await finishWorkout(page)
 
-  // The session shows up in History with both sets.
+  // The session shows up in History with both sets. Scoped to the newest card:
+  // the worker's account is shared across spec files (see support/auth.js), so
+  // an unscoped count picks up other specs' workouts too.
   await page.goto('/history')
-  await expect(page.locator('.history-card').first()).toContainText('Push')
-  await expect(page.locator('.history-set-pill')).toHaveCount(2)
+  const latestSession = page.locator('.history-card').first()
+  await expect(latestSession).toContainText('Push')
+  await expect(latestSession.locator('.history-set-pill')).toHaveCount(2)
 })
 
 test('rest timer survives a page reload', async ({ page, request, authToken }) => {

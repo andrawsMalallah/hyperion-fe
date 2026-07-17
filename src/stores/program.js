@@ -209,7 +209,8 @@ export const useProgramStore = defineStore('program', () => {
     const payload = {
       name: draftProgramData.name,
       is_active: false,
-      is_public: draftProgramData.is_public ?? true,
+      // Private unless the builder's visibility toggle was deliberately flipped.
+      is_public: draftProgramData.is_public ?? false,
       days: draftProgramData.days.map((d, index) => ({
         day_name: d.day_name,
         display_order: index + 1,
@@ -285,7 +286,8 @@ export const useProgramStore = defineStore('program', () => {
     const payload = {
       name: Program.name,
       is_active: Program.is_active,
-      is_public: Program.is_public ?? true,
+      // A missing flag must never silently publish — fall back to private.
+      is_public: Program.is_public ?? false,
       days: draftDays.map((d, index) => {
         const payloadDay = {
           day_name: d.day_name,

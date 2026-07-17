@@ -22,9 +22,11 @@ const SPA_URL = `http://localhost:${SPA_PORT}`;
 
 export default defineConfig({
   testDir: './tests',
-  // Each worker mints its own account (tests/support/auth.js), so files are free
-  // to run in parallel — but tests within a file share that account's data and
-  // must stay serial.
+  // Each worker mints one account (tests/support/auth.js) and reuses it for every
+  // test it runs — so an account is shared across spec files, not just within one.
+  // Under `workers: 1` (CI) that means a single account for the whole project run.
+  // Assertions must therefore scope to the data they created rather than counting
+  // everything the account owns.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -80,6 +80,10 @@ export const useExerciseStore = defineStore('exercise', () => {
   }
 
   const reset = () => {
+    // Clear the dictionary too: it can hold exercises merged from the previous
+    // account's program days (including their pending contributions), which
+    // must not leak into whoever logs in next on this device.
+    exercises.value = []
     catalog.value = []
     isLoaded.value = false
     exercisePage.value = 1

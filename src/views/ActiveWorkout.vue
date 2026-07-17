@@ -619,7 +619,7 @@ async function saveWorkout() {
         </template>
 
         <!-- Actions -->
-        <div class="builder-actions" style="margin-top: 24px;">
+        <div class="builder-actions workout-actions">
           <button class="builder-delete-btn" @click="showLeaveModal = true" :disabled="!hasChanges || isSaving">
             Discard
           </button>
@@ -633,9 +633,9 @@ async function saveWorkout() {
         </div>
       </div>
 
-      <div v-else-if="!programStore.loading" class="card empty-state text-center py-24" style="margin-top: 16px;" key="empty">
+      <div v-else-if="!programStore.loading" class="card empty-state empty-day-state text-center py-24" key="empty">
         <p>There are no exercises added to this workout day yet. Please add some exercises first.</p>
-        <PrimaryButton :to="'/builder/' + (day?.program_id || '')" class="inline-flex no-underline mt-16" style="justify-content: center;">
+        <PrimaryButton :to="'/builder/' + (day?.program_id || '')" class="inline-flex no-underline mt-16 go-builder-btn">
           Go to Program Builder
         </PrimaryButton>
       </div>
@@ -714,7 +714,7 @@ async function saveWorkout() {
     >
       <div class="history-list-container mb-16" @scroll="onHistoryScroll">
         <div v-if="loadingHistory" class="spinner-container py-24 text-center">
-          <div class="spinner" style="margin: 0 auto;"></div>
+          <div class="spinner spinner-centered"></div>
         </div>
         <div v-else-if="exHistoryLogs.length === 0" class="empty-state py-24 text-center">
           No history yet for this exercise.
@@ -737,7 +737,7 @@ async function saveWorkout() {
             </div>
           </div>
           <div v-if="loadingMoreHistory" class="spinner-container py-12 text-center">
-            <div class="spinner" style="margin: 0 auto;"></div>
+            <div class="spinner spinner-centered"></div>
           </div>
         </div>
       </div>
@@ -746,6 +746,23 @@ async function saveWorkout() {
 </template>
 
 <style scoped>
+/* Spacing/centering that used to live inline on the elements. */
+.workout-actions {
+  margin-top: 24px;
+}
+
+.empty-day-state {
+  margin-top: 16px;
+}
+
+.go-builder-btn {
+  justify-content: center;
+}
+
+.spinner-centered {
+  margin: 0 auto;
+}
+
 .ex-title-block {
   display: flex;
   flex-direction: column;

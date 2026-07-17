@@ -44,7 +44,9 @@ const targetProgram = computed(() => {
 // Local Draft State
 const draftDays = ref([])
 const draftProgramName = ref('')
-const draftIsPublic = ref(true)
+// New programs start PRIVATE (user's call, Session 26) — publishing to
+// Discover is a deliberate toggle, never a default someone ships unnoticed.
+const draftIsPublic = ref(false)
 const isDirty = ref(false)
 const isSaving = ref(false)
 const isDeleting = ref(false)
@@ -52,7 +54,7 @@ const isDeleting = ref(false)
 const initializeDraft = () => {
   if (targetProgram.value) {
     draftProgramName.value = targetProgram.value.name
-    draftIsPublic.value = targetProgram.value.is_public ?? true
+    draftIsPublic.value = targetProgram.value.is_public ?? false
     if (route.params.programId === 'new') {
       draftDays.value = JSON.parse(JSON.stringify(targetProgram.value.days || []))
     } else {
@@ -387,7 +389,7 @@ const deleteProgramModalTitle = computed(() => {
 const deleteProgramModalMessage = computed(() => {
   return route.params.programId === 'new'
     ? 'Are you sure you want to discard this program draft? This action cannot be undone.'
-    : 'Are you sure you want to delete this entire program? This action cannot be undone.'
+    : 'Are you sure you want to delete this entire program? This action cannot be undone. Workouts you already logged with it stay in your History.'
 })
 
 const deleteProgramConfirmText = computed(() => {

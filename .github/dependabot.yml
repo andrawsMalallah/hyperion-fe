@@ -1,0 +1,31 @@
+version: 2
+
+# Dependency update PRs. Deliberately NOT auto-merged: a push to main is the
+# deploy trigger (Render), so anything that lands on main goes live once CI is
+# green — every PR here gets reviewed by hand.
+#
+# ⚠️ dist/ is committed and is what Render actually serves (no build step on the
+# deploy). Dependabot updates package-lock.json but CANNOT rebuild dist/, so a
+# merged npm PR does NOT change the live bundle. Any update that affects build
+# output only reaches production when someone runs `npx vite build` and recommits
+# dist/ — see CLAUDE.md. Most dep bumps (Node-only packages like form-data) leave
+# dist/ byte-identical and need nothing.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  # The CI workflow's own actions (actions/checkout, setup-node, …). Low traffic,
+  # but this is what stops them silently aging out.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
