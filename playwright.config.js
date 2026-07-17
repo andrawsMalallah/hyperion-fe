@@ -68,6 +68,11 @@ export default defineConfig({
         // Every request in the run comes from one IP, so the 5/min/IP auth limit
         // would fail tests for reasons unrelated to the code under test.
         AUTH_RATE_LIMIT: '1000',
+        // Same problem on the API limiter, which keys by user id: the whole run
+        // shares ONE minted account, so all of it competes for a single 60/min
+        // budget. Adding specs eventually trips it as a 429 that looks like a
+        // flaky test (it surfaced as "POST /programs -> 429" in Session 28).
+        API_RATE_LIMIT: '10000',
         // CORS is pinned to exactly this origin, and the SPA is on a test port.
         FRONTEND_URL: SPA_URL,
       },

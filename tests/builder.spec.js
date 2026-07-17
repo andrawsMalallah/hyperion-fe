@@ -52,6 +52,87 @@ test('a program built in the UI saves and comes back from the server', async ({ 
   expect(saved.days[0].exercises[0].name).toBe(exerciseName)
 })
 
+// Prescriptions and grouping are edited by mutating day.prescriptions straight
+// from the template, which only persists because localDays shares that object
+// BY REFERENCE with the draft (see the comment above setExerciseType). Every
+// other spec seeds prescriptions through the API, so nothing drove that write
+// path in a browser — a refactor could silently stop targets from saving and the
+// suite would stay green.
+test('targets set in the builder UI persist to the server', async ({ page, request, authToken }) => {
+  const catalog = (await api(request, authToken, 'GET', '/exercises?per_page=1')).data
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: 'E2E Targets Program',
+    days: [{ day_name: 'Push', display_order: 1, exercises: [{ exercise_id: catalog[0].id }] }]
+  })).data
+
+  await page.goto(`/builder/${program.id}`)
+
+  // No prescription yet, so the strip offers "Set targets" rather than chips.
+  await page.locator('.target-add').first().click()
+
+  await page.getByLabel('Sets', { exact: true }).fill('4')
+  await page.getByLabel('Reps min', { exact: true }).fill('6')
+  await page.getByLabel('Reps max', { exact: true }).fill('10')
+  await page.getByLabel('RPE', { exact: true }).fill('9')
+  await page.getByLabel('Rest (s)', { exact: true }).fill('180')
+  await page.getByLabel('Notes', { exact: true }).fill('Pause on the chest.')
+
+  // The chips reflect the edit before saving.
+  await expect(page.locator('.target-chip').first()).toContainText('4 × 6–10')
+
+  await page.locator('.builder-save-btn').click()
+  await expect(page.locator('.builder-save-btn')).toHaveText('Saved')
+
+  // The real assertion: it reached the pivot, not just the screen.
+  const saved = (await api(request, authToken, 'GET', `/programs/${program.id}`)).data
+  const pivot = saved.days[0].exercises[0].pivot
+  expect(pivot.target_sets).toBe(4)
+  expect(pivot.rep_range_min).toBe(6)
+  expect(pivot.rep_range_max).toBe(10)
+  expect(pivot.target_rpe).toBe(9)
+  expect(pivot.rest_seconds).toBe(180)
+  expect(pivot.notes).toBe('Pause on the chest.')
+})
+
+// The grouping write path: picking a type and a member writes group_type +
+// group_key onto BOTH exercises via the same shared-reference draft.
+test('a superset built in the builder UI persists to both exercises', async ({ page, request, authToken }) => {
+  const catalog = (await api(request, authToken, 'GET', '/exercises?per_page=2')).data
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: 'E2E Grouping Program',
+    days: [{
+      day_name: 'Pull',
+      display_order: 1,
+      exercises: [{ exercise_id: catalog[0].id }, { exercise_id: catalog[1].id }]
+    }]
+  })).data
+
+  await page.goto(`/builder/${program.id}`)
+
+  // Open the first exercise's targets and make it a superset.
+  await page.locator('.target-add').first().click()
+  await page.locator('.rx-field-type select').first().selectOption('superset')
+
+  // The member list appears on the anchor only, and warns until the group is
+  // the right size (a superset joins exactly 2).
+  await expect(page.locator('.rx-group-hint--warn')).toBeVisible()
+  await page.locator('.rx-group-option input').first().check()
+  await expect(page.locator('.rx-group-hint--warn')).toHaveCount(0)
+
+  await page.locator('.builder-save-btn').click()
+  await expect(page.locator('.builder-save-btn')).toHaveText('Saved')
+
+  const saved = (await api(request, authToken, 'GET', `/programs/${program.id}`)).data
+  const pivots = saved.days[0].exercises.map(e => e.pivot)
+  expect(pivots).toHaveLength(2)
+  for (const pivot of pivots) {
+    expect(pivot.group_type).toBe('superset')
+    expect(pivot.group_key).not.toBeNull()
+  }
+  // Both must share one key, or they aren't actually the same group.
+  expect(pivots[0].group_key).toBe(pivots[1].group_key)
+})
+
 // Two modals can hold the scroll lock at once: navigating away from a dirty
 // program with the picker still open puts the unsaved-changes AppModal on top of
 // it. The lock is a single class on <html>/<body>, so an uncounted
