@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useExerciseStore } from '../stores/exercise'
 import PrimaryButton from './PrimaryButton.vue'
 import { muscleGroupColor } from '../utils/muscleColors'
 import { useFocusTrap } from '../composables/useFocusTrap'
+import { useModalLock } from '../composables/useModalLock'
 
 const props = defineProps({
   show: Boolean,
@@ -90,22 +91,10 @@ useFocusTrap(() => props.show, modalRef, {
   onEscape: () => closeModal()
 })
 
-watch(() => props.show, async (newVal) => {
-  if (newVal) {
-    document.documentElement.classList.add('modal-open')
-    document.body.classList.add('modal-open')
-    await exerciseStore.fetchExercises(false, false)
-  } else {
-    document.documentElement.classList.remove('modal-open')
-    document.body.classList.remove('modal-open')
-  }
-})
+useModalLock(() => props.show)
 
-onUnmounted(() => {
-  if (props.show) {
-    document.documentElement.classList.remove('modal-open')
-    document.body.classList.remove('modal-open')
-  }
+watch(() => props.show, async (newVal) => {
+  if (newVal) await exerciseStore.fetchExercises(false, false)
 })
 </script>
 

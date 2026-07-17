@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useDiscoverStore } from '../stores/discover'
 import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
@@ -78,16 +78,6 @@ async function handleClone() {
   }
 }
 
-watch(selectedProgram, (newVal) => {
-  if (newVal) {
-    document.documentElement.classList.add('modal-open')
-    document.body.classList.add('modal-open')
-  } else {
-    document.documentElement.classList.remove('modal-open')
-    document.body.classList.remove('modal-open')
-  }
-})
-
 function setupObserver() {
   observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && !loading.value && hasMore.value) {
@@ -112,8 +102,8 @@ onUnmounted(() => {
   clearTimeout(searchTimeout)
   // A leftover query would silently filter the next visit's results.
   discoverStore.searchQuery = ''
-  document.documentElement.classList.remove('modal-open')
-  document.body.classList.remove('modal-open')
+  // The detail modal's scroll lock is AppModal's to release (useModalLock),
+  // not this view's — it unmounts with the page.
 })
 </script>
 

@@ -52,6 +52,62 @@ test('a program built in the UI saves and comes back from the server', async ({ 
   expect(saved.days[0].exercises[0].name).toBe(exerciseName)
 })
 
+// Two modals can hold the scroll lock at once: navigating away from a dirty
+// program with the picker still open puts the unsaved-changes AppModal on top of
+// it. The lock is a single class on <html>/<body>, so an uncounted
+// add/remove lets the first modal to close unlock the page behind the one still
+// open. useModalLock counts holders; this pins that.
+test('the page stays scroll-locked when one of two stacked modals closes', async ({ page, request, authToken }) => {
+  // Active, so Home's showcase offers the Edit shortcut this test navigates by.
+  const program = (await api(request, authToken, 'POST', '/programs', {
+    name: 'E2E Lock Program',
+    is_active: true,
+    days: [{ day_name: 'Legs', display_order: 1, exercises: [] }]
+  })).data
+
+  // Reach the builder THROUGH the SPA. Two page.goto()s would be two separate
+  // documents, so going back would be a full page load that vue-router never
+  // sees — and onBeforeRouteLeave (the whole point of this test) never fires.
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Edit program' }).click()
+  await page.waitForURL(`**/builder/${program.id}`)
+
+  const picker = page.locator('.modal-overlay').filter({ has: page.locator('.modal-exercise-list') })
+  const leaveModal = page.locator('.modal-overlay').filter({ hasText: 'Unsaved Changes' })
+
+  // Dirty the program, so leaving triggers the unsaved-changes guard.
+  await page.locator('button[title="Add Exercise"]').first().click()
+  await expect(picker).toBeVisible()
+  // `.selectable-item`, not `.exercise-item`: the loading skeletons reuse the
+  // latter, and clicking one selects nothing.
+  await picker.locator('.selectable-item').first().click()
+  await picker.getByRole('button', { name: /Add Selected \(1\)/ }).click()
+  await expect(picker).toBeHidden()
+
+  // Re-open the picker and navigate away with it still up. The guard is async
+  // (it holds the navigation open on a promise), so don't await the back.
+  await page.locator('button[title="Add Exercise"]').first().click()
+  await expect(picker).toBeVisible()
+  page.goBack().catch(() => {})
+
+  await expect(leaveModal).toBeVisible()
+  await expect(picker).toBeVisible()
+
+  // Stay: the AppModal closes, but the picker underneath is still open, so the
+  // page behind must remain locked.
+  await leaveModal.getByRole('button', { name: 'Stay' }).click()
+  await expect(leaveModal).toBeHidden()
+  await expect(picker).toBeVisible()
+
+  await expect(page.locator('body')).toHaveClass(/modal-open/)
+  await expect(page.locator('html')).toHaveClass(/modal-open/)
+
+  // And the lock still lifts once the last holder closes.
+  await page.keyboard.press('Escape')
+  await expect(picker).toBeHidden()
+  await expect(page.locator('body')).not.toHaveClass(/modal-open/)
+})
+
 // The picker is a hand-rolled overlay rather than an AppModal, so its keyboard
 // behaviour comes from useFocusTrap and nothing else pins it.
 test('the exercise picker traps focus and closes on Escape', async ({ page, request, authToken }) => {

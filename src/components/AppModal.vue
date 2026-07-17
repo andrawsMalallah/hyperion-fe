@@ -1,7 +1,8 @@
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 import PrimaryButton from './PrimaryButton.vue'
 import { useFocusTrap } from '../composables/useFocusTrap'
+import { useModalLock } from '../composables/useModalLock'
 
 const props = defineProps({
   show: Boolean,
@@ -55,22 +56,10 @@ useFocusTrap(() => props.show, modalRef, {
   initialFocus: () => (props.type === 'prompt' ? inputRef.value : null)
 })
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    document.documentElement.classList.add('modal-open')
-    document.body.classList.add('modal-open')
-    inputValue.value = props.defaultValue
-  } else {
-    document.documentElement.classList.remove('modal-open')
-    document.body.classList.remove('modal-open')
-  }
-})
+useModalLock(() => props.show)
 
-onUnmounted(() => {
-  if (props.show) {
-    document.documentElement.classList.remove('modal-open')
-    document.body.classList.remove('modal-open')
-  }
+watch(() => props.show, (newVal) => {
+  if (newVal) inputValue.value = props.defaultValue
 })
 
 const onConfirm = () => {
