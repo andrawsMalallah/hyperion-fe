@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@sentry/vue": "^10.65.0",
+    "@sentry/vue": "^10.66.0",
     "axios": "^1.17.0",
     "overlayscrollbars": "^2.16.0",
     "overlayscrollbars-vue": "^0.5.10",
