@@ -6,6 +6,7 @@ import { useWorkoutStore } from './workout';
 import { useHistoryStore } from './history';
 import { useDiscoverStore } from './discover';
 import { useProgressStore } from './progress';
+import { useBodyweightStore } from './bodyweight';
 import { useAdminStore } from './admin';
 import { setSentryUser, clearSentryUser } from '../sentry';
 
@@ -75,6 +76,7 @@ export const useAuthStore = defineStore('auth', {
       useHistoryStore().reset();
       useDiscoverStore().reset();
       useProgressStore().reset();
+      useBodyweightStore().reset();
       useAdminStore().reset();
       this.clearAuthData();
     },

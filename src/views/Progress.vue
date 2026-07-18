@@ -1,16 +1,21 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useProgressStore } from '../stores/progress'
+import { useBodyweightStore } from '../stores/bodyweight'
 import { useWorkoutStore } from '../stores/workout'
+import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
-import { formatWeight } from '../utils/units'
+import { formatWeight, toKg } from '../utils/units'
 import TrendChart from '../components/TrendChart.vue'
 import VolumeChart from '../components/VolumeChart.vue'
+import BodyWeightChart from '../components/BodyWeightChart.vue'
 import { dateFmt } from '../utils/chart'
 
 const progressStore = useProgressStore()
+const bodyweightStore = useBodyweightStore()
 const workoutStore = useWorkoutStore()
+const toastStore = useToastStore()
 
 const pageLoading = ref(true)
 const unit = computed(() => workoutStore.weightUnit)
@@ -18,8 +23,10 @@ const unit = computed(() => workoutStore.weightUnit)
 onMounted(async () => {
   // All trends/volume/PRs come from one server-side aggregate call now. Force a
   // fresh fetch each visit so the page reflects the latest session immediately
-  // (a workout finished/edited/deleted just before opening Progress).
-  await progressStore.fetchStats(true)
+  // (a workout finished/edited/deleted just before opening Progress). Body
+  // weight is independent of workout data, so it loads in parallel and its card
+  // shows even before the first workout is logged.
+  await Promise.all([progressStore.fetchStats(true), bodyweightStore.fetch(true)])
   if (!selectedExerciseId.value && exerciseOptions.value.length > 0) {
     selectedExerciseId.value = exerciseOptions.value[0].id
   }
@@ -63,9 +70,14 @@ const recentPRs = computed(() =>
 // are many sessions the SVG grows past the viewport and scrolls horizontally —
 // keeping every label legible instead of cramming them together.
 const chartWrap = ref(null)
+const bwWrap = ref(null)
 const viewWidth = ref(560)
 function measure() {
-  if (chartWrap.value) viewWidth.value = Math.max(240, chartWrap.value.clientWidth - 40)
+  // The est-1RM card only exists when there's workout data; fall back to the
+  // always-present Body Weight card so the width is still measured (not left at
+  // the 560 default) on an account with no workouts yet.
+  const el = chartWrap.value || bwWrap.value
+  if (el) viewWidth.value = Math.max(240, el.clientWidth - 40)
 }
 
 const trendPoints = computed(() => {
@@ -87,6 +99,56 @@ function scrollToPRs() {
 // Best working set from the 5 most recent sessions of the selected exercise,
 // newest first (trendPoints is oldest-first).
 const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5))
+
+// ---- Body weight
+// A YYYY-MM-DD string in the *local* day, not UTC — using toISOString directly
+// can roll the date back a step for users in negative offsets near midnight.
+function localYmd(date = new Date()) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+// Parse a 'YYYY-MM-DD' as a local calendar day (new Date('2026-07-18') is UTC
+// midnight, which can display as the previous day in a negative-offset zone).
+function parseYmd(ymd) {
+  const [year, month, day] = ymd.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const today = localYmd()
+const weightInput = ref('')
+const dateInput = ref(today)
+
+// Oldest-first points for the chart; parse dates as local days.
+const bodyPoints = computed(() =>
+  bodyweightStore.entries.map(entry => ({ date: parseYmd(entry.measured_on), weight: entry.weight }))
+)
+
+// Newest-first, capped — the compact list under the chart.
+const recentBodyEntries = computed(() => [...bodyweightStore.entries].reverse().slice(0, 6))
+
+const canLogWeight = computed(() => Number(weightInput.value) > 0 && !!dateInput.value)
+
+function bodyDateLabel(ymd) {
+  return parseYmd(ymd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+async function submitWeight() {
+  if (!canLogWeight.value || bodyweightStore.saving) return
+  // Inputs are in the display unit; store canonically in kg (rounded to the
+  // column's 2 decimals) exactly like set weights.
+  const kg = Number(toKg(weightInput.value, unit.value).toFixed(2))
+  if (!(kg > 0)) return
+  const ok = await bodyweightStore.logWeight(kg, dateInput.value)
+  if (ok) {
+    toastStore.success('Weight logged.')
+    weightInput.value = '' // keep the date so consecutive days are quick to add
+  }
+}
+
+async function deleteBodyEntry(entry) {
+  const ok = await bodyweightStore.remove(entry.id)
+  if (ok) toastStore.success('Entry deleted.')
+}
 </script>
 
 <template>
@@ -133,8 +195,11 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
       </div>
     </div>
 
-    <!-- Empty -->
-    <div v-else-if="!hasData" class="empty-state card py-40 text-center">
+    <template v-else>
+    <!-- Workout-derived progress; its own empty state when nothing is logged.
+         The Body Weight card below sits outside this branch so it's usable
+         before the first workout. -->
+    <div v-if="!hasData" class="empty-state card py-40 text-center">
       <p style="color: var(--text-secondary); margin: 0 0 16px 0;">Log a few workouts and your progress charts will appear here.</p>
       <PrimaryButton to="/" class="inline-flex no-underline px-24" style="justify-content: center; max-width: max-content; margin: 0 auto;">
         Start Training
@@ -233,7 +298,59 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
           </div>
         </div>
       </div>
+      </template>
 
+      <!-- Body Weight — always available, independent of workout data -->
+      <div class="card chart-card mb-24 bodyweight-card" ref="bwWrap">
+        <div class="bw-header">
+          <div>
+            <h2 class="chart-title">Body Weight</h2>
+            <p class="chart-sub">One entry per day · logging a day again updates it</p>
+          </div>
+          <div v-if="bodyweightStore.latest" class="bw-current">
+            <span class="bw-current-value">{{ formatWeight(bodyweightStore.latest.weight, unit) }}<span class="tile-unit">{{ unit }}</span></span>
+            <span class="bw-current-date">{{ bodyDateLabel(bodyweightStore.latest.measured_on) }}</span>
+          </div>
+        </div>
+
+        <BodyWeightChart :points="bodyPoints" :unit="unit" :view-width="viewWidth" />
+
+        <form class="bw-form" @submit.prevent="submitWeight">
+          <div class="bw-field">
+            <label class="bw-label" for="bw-weight">Weight ({{ unit }})</label>
+            <input
+              id="bw-weight"
+              v-model="weightInput"
+              type="number"
+              inputmode="decimal"
+              step="0.1"
+              min="0"
+              class="bw-input"
+              placeholder="0.0"
+            />
+          </div>
+          <div class="bw-field">
+            <label class="bw-label" for="bw-date">Date</label>
+            <input id="bw-date" v-model="dateInput" type="date" :max="today" class="bw-input" />
+          </div>
+          <PrimaryButton type="submit" class="bw-submit" :disabled="!canLogWeight || bodyweightStore.saving">
+            {{ bodyweightStore.saving ? 'Saving…' : 'Log' }}
+          </PrimaryButton>
+        </form>
+
+        <ul v-if="recentBodyEntries.length" class="bw-list">
+          <li v-for="entry in recentBodyEntries" :key="entry.id" class="bw-list-row">
+            <span class="bw-list-date">{{ bodyDateLabel(entry.measured_on) }}</span>
+            <span class="bw-list-weight">{{ formatWeight(entry.weight, unit) }}{{ unit }}</span>
+            <button
+              type="button"
+              class="bw-delete"
+              :aria-label="`Delete entry for ${bodyDateLabel(entry.measured_on)}`"
+              @click="deleteBodyEntry(entry)"
+            >×</button>
+          </li>
+        </ul>
+      </div>
     </template>
   </div>
 </template>
@@ -535,5 +652,140 @@ const recentTopSets = computed(() => [...trendPoints.value].reverse().slice(0, 5
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+/* --- Body Weight card --- */
+.bw-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Right-aligned current weight so it reads as the card's headline figure. */
+.bw-current {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.bw-current-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.bw-current-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* Weight + date side by side; the Log button spans the full row beneath them —
+   comfortable on a narrow phone without wrapping unpredictably. */
+.bw-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+}
+
+.bw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bw-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bw-input {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  /* Keep the native date picker's calendar icon + text legible on the dark
+     surface (otherwise it renders as dark-on-dark). */
+  color-scheme: dark;
+}
+
+.bw-input:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+.bw-submit {
+  grid-column: 1 / -1;
+}
+
+.bw-list {
+  list-style: none;
+  margin: 16px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bw-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.bw-list-row:first-child {
+  border-top: none;
+}
+
+.bw-list-date {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bw-list-weight {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Small, unobtrusive delete affordance; enlarges its hit area on tap. */
+.bw-delete {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+.bw-delete:hover {
+  border-color: var(--danger, #e5484d);
+  color: var(--danger, #e5484d);
 }
 </style>
