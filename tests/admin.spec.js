@@ -16,7 +16,8 @@ async function seedPendingExercise(request) {
   await api(request, contributor.token, 'POST', '/exercises', {
     name,
     target_muscle_group: 'Chest',
-    mechanics_type: 'Isolation'
+    mechanics_type: 'Isolation',
+    measurement_type: 'weighted'
   })
   return name
 }

@@ -57,7 +57,10 @@ function normalizeHistory(logs) {
           set: index + 1,
           set_type: set.set_type || 'working',
           weight_kg: Number(set.weight) || 0,
-          reps: set.reps,
+          reps: set.reps ?? null,
+          // Timed exercises (planks, hangs) log a hold instead of reps; the
+          // column stays present-but-empty for every rep-based set.
+          duration_seconds: set.duration_seconds ?? null,
           rpe: set.rpe ?? null,
         })),
       }
@@ -91,7 +94,7 @@ function csvCell(value) {
 
 /** Build a CSV string: one row per set, newest workouts first (endpoint order). */
 export function buildHistoryCsv(logs, unit) {
-  const header = ['date', 'time', 'day', 'program', 'exercise', 'set', 'set_type', `weight_${unit}`, 'reps', 'rpe']
+  const header = ['date', 'time', 'day', 'program', 'exercise', 'set', 'set_type', `weight_${unit}`, 'reps', 'duration_seconds', 'rpe']
   const rows = [header.join(',')]
 
   normalizeHistory(logs).forEach((workout) => {
@@ -108,7 +111,8 @@ export function buildHistoryCsv(logs, unit) {
             set.set,
             set.set_type,
             roundWeight(set.weight_kg, unit),
-            set.reps,
+            set.reps ?? '',
+            set.duration_seconds ?? '',
             set.rpe ?? '',
           ]
             .map(csvCell)
@@ -132,6 +136,7 @@ export function buildHistoryJson(logs, unit) {
         set_type: set.set_type,
         weight: roundWeight(set.weight_kg, unit),
         reps: set.reps,
+        duration_seconds: set.duration_seconds,
         rpe: set.rpe,
       })),
     })),

@@ -56,6 +56,8 @@ export function weeklyVolume(logs, weeks = 8) {
 
 // Compare a just-finished workout's sets against each exercise's prior best
 // estimated 1RM and return the exercises where a new best was hit.
+// Expects WEIGHTED sets only (see utils/measurement.js) — the caller filters,
+// since a bodyweight set's weight is added load rather than the load itself.
 // `previousBestByExercise` maps exercise_id -> prior best e1rm (0/absent means
 // no history, which never counts as a PR).
 // Shape: [{ exercise_id, e1rm, weight, reps, previousBest }]

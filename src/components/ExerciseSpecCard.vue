@@ -13,6 +13,7 @@ import {
   groupMembers,
   groupLetter
 } from '../utils/grouping'
+import { measurementOf, usesReps } from '../utils/measurement'
 
 // One exercise inside a day in the Program Builder: header, targets strip, and
 // the expandable prescription editor (including the grouping member list).
@@ -53,6 +54,10 @@ const exerciseType = computed(() => typeOf(props.day, props.element.id))
 
 const railColor = computed(() => muscleGroupColor(props.element.target_muscle_group))
 
+// Timed exercises have no reps, so the rep range doubles as a target hold in
+// seconds — the fields are relabelled rather than duplicated on the pivot.
+const isTimed = computed(() => !usesReps(measurementOf(props.element)))
+
 function rxSummary() {
   const value = rx.value
   if (!value) return ''
@@ -63,7 +68,7 @@ function rxSummary() {
     else if (value.rep_range_min) reps = `×${value.rep_range_min}+`
     parts.push(`${value.target_sets}${reps}`)
   } else if (value.rep_range_min && value.rep_range_max) {
-    parts.push(`${value.rep_range_min}-${value.rep_range_max} reps`)
+    parts.push(`${value.rep_range_min}-${value.rep_range_max} ${isTimed.value ? 'sec' : 'reps'}`)
   }
   if (value.target_rpe) parts.push(`@${value.target_rpe}`)
   if (value.rest_seconds) parts.push(`${value.rest_seconds}s rest`)
@@ -77,13 +82,15 @@ const hasAnyRx = computed(() => !!(rxSummary() || exerciseType.value))
 // Structured version of the prescription, one value per target chip.
 const chips = computed(() => {
   const value = rx.value || {}
+  // A timed target reads as a hold ("3 × 30–60s"), not a rep count.
+  const unit = isTimed.value ? 's' : ''
   let reps = ''
-  if (value.rep_range_min && value.rep_range_max) reps = `${value.rep_range_min}–${value.rep_range_max}`
-  else if (value.rep_range_min) reps = `${value.rep_range_min}+`
+  if (value.rep_range_min && value.rep_range_max) reps = `${value.rep_range_min}–${value.rep_range_max}${unit}`
+  else if (value.rep_range_min) reps = `${value.rep_range_min}${unit}+`
   let setsReps = ''
   if (value.target_sets && reps) setsReps = `${value.target_sets} × ${reps}`
   else if (value.target_sets) setsReps = `${value.target_sets} sets`
-  else if (reps) setsReps = `${reps} reps`
+  else if (reps) setsReps = isTimed.value ? reps : `${reps} reps`
   return {
     setsReps,
     rpe: value.target_rpe || '',
@@ -235,17 +242,19 @@ const groupStatus = computed(() => {
               v-model.number="rx.target_sets" @input="$emit('dirty')"
               placeholder="3" />
           </label>
+          <!-- Timed exercises reuse the rep range as a target hold in seconds,
+               so a plank prescribes "3 × 30-60s" without its own columns. -->
           <label class="rx-field">
-            <span>Reps min</span>
+            <span>{{ isTimed ? 'Seconds min' : 'Reps min' }}</span>
             <input type="number" min="1" max="100"
               v-model.number="rx.rep_range_min" @input="$emit('dirty')"
-              placeholder="8" />
+              :placeholder="isTimed ? '30' : '8'" />
           </label>
           <label class="rx-field">
-            <span>Reps max</span>
+            <span>{{ isTimed ? 'Seconds max' : 'Reps max' }}</span>
             <input type="number" min="1" max="100"
               v-model.number="rx.rep_range_max" @input="$emit('dirty')"
-              placeholder="12" />
+              :placeholder="isTimed ? '60' : '12'" />
           </label>
           <label class="rx-field">
             <span>RPE</span>

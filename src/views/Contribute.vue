@@ -4,6 +4,7 @@ import api from '../api'
 import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
+import { MEASUREMENT_OPTIONS, WEIGHTED, measurementLabel } from '../utils/measurement'
 
 const toast = useToastStore()
 
@@ -11,6 +12,13 @@ const toast = useToastStore()
 const exerciseName = ref('')
 const targetMuscleGroup = ref('')
 const mechanicsType = ref('Compound')
+const measurementType = ref(WEIGHTED)
+
+// Spell out what the selected type means — the choice decides which inputs the
+// workout screen shows, which isn't obvious from the label alone.
+const measurementHint = computed(
+  () => MEASUREMENT_OPTIONS.find(o => o.value === measurementType.value)?.hint || ''
+)
 
 // UI state
 const submitting = ref(false)
@@ -86,7 +94,8 @@ async function submitExercise() {
     const response = await api.post('/exercises', {
       name: exerciseName.value.trim(),
       target_muscle_group: targetMuscleGroup.value,
-      mechanics_type: mechanicsType.value
+      mechanics_type: mechanicsType.value,
+      measurement_type: measurementType.value
     })
 
     const created = response.data.data
@@ -95,6 +104,7 @@ async function submitExercise() {
     exerciseName.value = ''
     targetMuscleGroup.value = ''
     mechanicsType.value = 'Compound'
+    measurementType.value = WEIGHTED
 
     // Surface the new pending submission at the top of "My exercises".
     mySearch.value = ''
@@ -194,6 +204,22 @@ async function submitExercise() {
         </div>
       </div>
 
+      <!-- Measurement Type — decides which inputs the workout screen shows -->
+      <div class="form-group">
+        <label class="form-label" for="measurement-type">How is it measured?</label>
+        <select
+          id="measurement-type"
+          v-model="measurementType"
+          class="form-input form-select"
+          :disabled="submitting"
+        >
+          <option v-for="option in MEASUREMENT_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <p class="form-hint">{{ measurementHint }}</p>
+      </div>
+
       <!-- Submit Button -->
       <PrimaryButton
         @click="submitExercise"
@@ -242,6 +268,7 @@ async function submitExercise() {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -251,6 +278,7 @@ async function submitExercise() {
               <td><span class="sk-bar" style="width: 80%;"></span></td>
               <td><span class="sk-bar" style="width: 60%;"></span></td>
               <td><span class="sk-bar" style="width: 55%;"></span></td>
+              <td><span class="sk-bar" style="width: 50%;"></span></td>
               <td><span class="sk-bar sk-bar-pill"></span></td>
             </tr>
           </tbody>
@@ -271,6 +299,7 @@ async function submitExercise() {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -287,6 +316,7 @@ async function submitExercise() {
               </td>
               <td>{{ ex.target_muscle_group }}</td>
               <td>{{ ex.mechanics_type }}</td>
+              <td>{{ measurementLabel(ex.measurement_type) }}</td>
               <td>
                 <span class="status-pill" :class="statusMeta[ex.status]?.cls">
                   {{ statusMeta[ex.status]?.label || ex.status }}
@@ -409,6 +439,13 @@ async function submitExercise() {
   background-color: #1a1a1a;
   color: var(--text-primary);
   padding: 8px;
+}
+
+/* Explains what the selected measurement type means for logging. */
+.form-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Mechanics Toggle */

@@ -7,6 +7,7 @@ import { useSyncStore } from './sync'
 import { useProgramStore } from './program'
 import { useExerciseStore } from './exercise'
 import { detectPRs } from '../utils/stats'
+import { countsTowardTonnage, measurementOf } from '../utils/measurement'
 
 export const useWorkoutStore = defineStore('workout', () => {
   try {
@@ -85,7 +86,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       sets: activeWorkoutSets.value.map((s, index) => ({
         exercise_id: s.exercise_id,
         weight: s.weight,
-        reps: s.reps,
+        reps: s.reps ?? null,
+        duration_seconds: s.duration_seconds ?? null,
         rpe: s.rpe || null,
         set_type: s.set_type || 'working',
         set_order: index + 1
@@ -99,15 +101,24 @@ export const useWorkoutStore = defineStore('workout', () => {
     for (const [id, entry] of Object.entries(recentByExercise.value)) {
       bestByExercise[id] = entry?.best_e1rm || 0
     }
-    const prs = enrichPRs(detectPRs(bestByExercise, payload.sets))
+    // Weighted sets only — e1RM is meaningless for a rep or hold count, and the
+    // server reports no best_e1rm for those exercises anyway.
+    const prs = enrichPRs(detectPRs(
+      bestByExercise,
+      payload.sets.filter(s => countsTowardTonnage(measurementFor(s.exercise_id)))
+    ))
 
     // Session stats for the post-save summary (working sets are what the
     // athlete "did"; warmups don't count toward the volume total).
     const workingSets = payload.sets.filter(s => (s.set_type || 'working') !== 'warmup')
+    // Tonnage counts weighted exercises only — matching the server's rule. A
+    // bodyweight set's weight is added load, so counting it would report a
+    // +20kg pull-up as 20kg lifted.
+    const tonnageSets = workingSets.filter(s => countsTowardTonnage(measurementFor(s.exercise_id)))
     const summary = {
       prs,
       sets: workingSets.length,
-      volume: Math.round(workingSets.reduce((acc, s) => acc + s.weight * s.reps, 0)),
+      volume: Math.round(tonnageSets.reduce((acc, s) => acc + s.weight * s.reps, 0)),
       durationMs: Math.max(0, new Date(payload.ended_at) - new Date(payload.date_timestamp))
     }
 
@@ -162,6 +173,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     })
   }
 
+  // How an exercise is measured, resolved through the exercise catalog. An
+  // exercise missing from the dictionary falls back to 'weighted', which is how
+  // every set behaved before ROADMAP 1.9.
+  function measurementFor(exerciseId) {
+    return measurementOf(useExerciseStore().exercises.find(e => e.id === exerciseId))
+  }
+
   // Attach the exercise name to each PR so the summary modal can render it
   // without another store lookup at display time.
   function enrichPRs(prs) {
@@ -179,15 +197,21 @@ export const useWorkoutStore = defineStore('workout', () => {
     stopRestTimer()
   }
 
-  // weight arrives already converted to canonical kg by the caller.
+  // weight arrives already converted to canonical kg by the caller. For
+  // bodyweight exercises it's the ADDED load (0 when none); for timed ones,
+  // `reps` is null and options.durationSeconds carries the hold instead.
   function logSet(exerciseId, weightKg, reps, rpe = 0, options = {}) {
     if (!activeWorkoutDayId.value) return null
 
+    const duration = parseInt(options.durationSeconds)
     const set = {
       id: 'local-set-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
       exercise_id: exerciseId,
-      weight: Math.round(parseFloat(weightKg) * 100) / 100,
-      reps: parseInt(reps),
+      weight: Math.round((parseFloat(weightKg) || 0) * 100) / 100,
+      // Null rather than 0/NaN: the API rejects a set that carries both a rep
+      // count and a duration, so exactly one of these must be set.
+      reps: reps === null || reps === '' || reps === undefined ? null : parseInt(reps),
+      duration_seconds: Number.isFinite(duration) ? duration : null,
       rpe: parseInt(rpe) || null,
       set_type: options.setType || 'working'
     }

@@ -5,6 +5,7 @@ import PrimaryButton from './PrimaryButton.vue'
 import { useHistoryStore } from '../stores/history'
 import { useToastStore } from '../stores/toast'
 import { toKg, fromKg } from '../utils/units'
+import { canSaveSet, measurementOf, requiresWeight, usesReps } from '../utils/measurement'
 
 const props = defineProps({
   show: Boolean,
@@ -38,12 +39,14 @@ function buildGroups(workout) {
       map.set(s.exercise_id, {
         exerciseId: s.exercise_id,
         exerciseName: s.exercise ? s.exercise.name : 'Unknown Exercise',
+        measurement: measurementOf(s.exercise),
         sets: []
       })
     }
     map.get(s.exercise_id).sets.push({
       weight: weightForInput(s.weight),
-      reps: String(s.reps),
+      reps: s.reps != null ? String(s.reps) : '',
+      duration_seconds: s.duration_seconds != null ? String(s.duration_seconds) : '',
       rpe: s.rpe != null ? String(s.rpe) : '',
       set_type: s.set_type || 'working'
     })
@@ -68,8 +71,8 @@ function addSet(group) {
   const last = group.sets[group.sets.length - 1]
   group.sets.push(
     last
-      ? { weight: last.weight, reps: last.reps, rpe: last.rpe, set_type: last.set_type }
-      : { weight: '', reps: '', rpe: '', set_type: 'working' }
+      ? { ...last }
+      : { weight: '', reps: '', duration_seconds: '', rpe: '', set_type: 'working' }
   )
 }
 
@@ -92,18 +95,24 @@ async function save() {
   // grouped order (History regroups by exercise anyway). Weight → kg.
   const flat = []
   for (const g of groups.value) {
+    const timed = !usesReps(g.measurement)
+
     for (const s of g.sets) {
-      const weight = s.weight === '' || s.weight === null ? NaN : Number(s.weight)
-      const reps = s.reps === '' || s.reps === null ? NaN : parseInt(s.reps)
-      if (!isFinite(weight) || weight < 0 || !Number.isInteger(reps) || reps < 1) {
-        toast.error('Every set needs a valid weight and at least 1 rep.')
+      if (!canSaveSet(s, g.measurement)) {
+        toast.error(timed
+          ? 'Every timed set needs a duration of at least 1 second.'
+          : 'Every set needs a valid weight and at least 1 rep.')
         return
       }
       const rpe = s.rpe === '' || s.rpe === null ? null : parseInt(s.rpe)
+      // Blank weight means "no added load" on a bodyweight or timed set.
+      const weight = s.weight === '' || s.weight === null ? 0 : Number(s.weight)
       flat.push({
         exercise_id: g.exerciseId,
         weight: Math.round(toKg(weight, props.weightUnit) * 100) / 100,
-        reps,
+        // Exactly one of these — the API rejects a set carrying both.
+        reps: timed ? null : parseInt(s.reps),
+        duration_seconds: timed ? parseInt(s.duration_seconds) : null,
         rpe: Number.isInteger(rpe) ? rpe : null,
         set_type: s.set_type || 'working',
         set_order: flat.length + 1
@@ -148,8 +157,11 @@ async function save() {
 
         <div class="ew-set-head">
           <span>Set</span>
-          <span>{{ weightUnit }}</span>
-          <span>Reps</span>
+          <template v-if="usesReps(group.measurement)">
+            <span>{{ requiresWeight(group.measurement) ? weightUnit : `+${weightUnit}` }}</span>
+            <span>Reps</span>
+          </template>
+          <span v-else class="ew-span-2">Seconds</span>
           <span>RPE</span>
           <span></span>
         </div>
@@ -162,8 +174,19 @@ async function save() {
             :title="set.set_type === 'warmup' ? 'Warm-up set (tap to make working)' : 'Working set (tap to make warm-up)'"
             @click="toggleWarmup(set)"
           >{{ set.set_type === 'warmup' ? 'W' : (sIdx + 1) }}</button>
-          <input v-model="set.weight" type="number" inputmode="decimal" min="0" step="0.5" class="ew-input" />
-          <input v-model="set.reps" type="number" inputmode="numeric" min="1" step="1" class="ew-input" />
+          <template v-if="usesReps(group.measurement)">
+            <input v-model="set.weight" type="number" inputmode="decimal" min="0" step="0.5" class="ew-input" />
+            <input v-model="set.reps" type="number" inputmode="numeric" min="1" step="1" class="ew-input" />
+          </template>
+          <input
+            v-else
+            v-model="set.duration_seconds"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            step="1"
+            class="ew-input ew-span-2"
+          />
           <input v-model="set.rpe" type="number" inputmode="numeric" min="1" max="10" step="1" class="ew-input" placeholder="–" />
           <button type="button" class="ew-remove" title="Remove set" @click="removeSet(group, sIdx)" aria-label="Remove set">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -231,6 +254,12 @@ async function save() {
 .ew-set-head {
   margin-bottom: 6px;
   padding: 0 2px;
+}
+
+/* A timed set has one value where a weighted one has two (weight + reps), so
+   its input takes both tracks and the row keeps the same column alignment. */
+.ew-span-2 {
+  grid-column: span 2;
 }
 
 .ew-set-head span {

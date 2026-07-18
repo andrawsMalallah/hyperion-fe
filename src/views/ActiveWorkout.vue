@@ -23,6 +23,7 @@ import {
   groupLetter,
   isLastOfGroup
 } from '../utils/grouping'
+import { canSaveSet, formatDuration, measurementOf, usesReps } from '../utils/measurement'
 
 const props = defineProps({
   dayId: String
@@ -96,7 +97,8 @@ onMounted(async () => {
         .map(s => ({
           localId: s.id,
           weight: formatWeight(s.weight, workoutStore.weightUnit),
-          reps: s.reps,
+          reps: s.reps ?? '',
+          duration_seconds: s.duration_seconds ?? '',
           rpe: s.rpe ?? '',
           set_type: s.set_type || 'working',
           completed: true,
@@ -112,6 +114,7 @@ onMounted(async () => {
             localId: Date.now() + Math.random(),
             weight: '',
             reps: '',
+            duration_seconds: '',
             rpe: '',
             set_type: 'working',
             completed: false,
@@ -133,12 +136,16 @@ onMounted(async () => {
   pageLoading.value = false
 })
 
-function rxLabel(rx) {
+// `timed` relabels the rep range as a target hold in seconds — the builder
+// reuses the same two columns for both (see ExerciseSpecCard).
+function rxLabel(rx, timed = false) {
   if (!rx) return ''
   const parts = []
   if (rx.target_sets) {
     let reps = ''
-    if (rx.rep_range_min && rx.rep_range_max) reps = `×${rx.rep_range_min}-${rx.rep_range_max}`
+    if (rx.rep_range_min && rx.rep_range_max) {
+      reps = `×${rx.rep_range_min}-${rx.rep_range_max}${timed ? 's' : ''}`
+    }
     parts.push(`Target: ${rx.target_sets}${reps}`)
   }
   if (rx.target_rpe) parts.push(`@${rx.target_rpe}`)
@@ -193,10 +200,18 @@ function groupHeaderFor(ex) {
 
 function formatPrevSets(prevSets) {
   if (!prevSets || prevSets.length === 0) return ''
-  const shown = prevSets.slice(0, 4)
-    .map(s => `${formatWeight(s.weight, workoutStore.weightUnit)}×${s.reps}`)
-    .join(' · ')
+  const shown = prevSets.slice(0, 4).map(formatSetValue).join(' · ')
   return prevSets.length > 4 ? shown + ' …' : shown
+}
+
+// One logged set as text: a hold time, or weight×reps with the weight dropped
+// when there wasn't any (an unloaded pull-up reads "12", not "0kg×12").
+function formatSetValue(set) {
+  if (set.duration_seconds) return formatDuration(set.duration_seconds)
+  const load = Number(set.weight) > 0
+    ? `${formatWeight(set.weight, workoutStore.weightUnit)}×`
+    : ''
+  return `${load}${set.reps}`
 }
 
 function addSet(exIndex) {
@@ -204,6 +219,7 @@ function addSet(exIndex) {
     localId: Date.now() + Math.random(),
     weight: '',
     reps: '',
+    duration_seconds: '',
     rpe: '',
     set_type: 'working',
     completed: false,
@@ -227,20 +243,30 @@ function removeSet(exIndex, setIndex) {
 function saveSet(exIndex, setIndex) {
   const ex = activeWorkoutSession.value[exIndex]
   const s = ex.sets[setIndex]
-  if (s.weight === '' || s.weight === null || s.weight === undefined || s.reps === '' || s.reps === null || s.reps === undefined) return
+  if (!canSaveSet(s, measurementOf(ex.exercise))) return
 
   s.completed = true
+
+  const timed = !usesReps(measurementOf(ex.exercise))
 
   // Save to Pinia (converted to canonical kg).
   // A superset / giant set rests only once, after its last exercise — so a set
   // logged on any earlier member of the group must not start the timer. The
   // rest that does fire is the last exercise's own, which is why restSeconds
   // still comes from the exercise being saved.
-  s.setId = workoutStore.logSet(ex.id, toKg(s.weight, workoutStore.weightUnit), Number(s.reps), s.rpe || 0, {
-    setType: s.set_type,
-    restSeconds: ex.rx?.rest_seconds || null,
-    startRest: isLastOfGroup(day.value, ex.id)
-  })
+  s.setId = workoutStore.logSet(
+    ex.id,
+    // Blank weight on a bodyweight or timed set means "no added load".
+    toKg(s.weight === '' ? 0 : s.weight, workoutStore.weightUnit),
+    timed ? null : Number(s.reps),
+    s.rpe || 0,
+    {
+      durationSeconds: timed ? Number(s.duration_seconds) : null,
+      setType: s.set_type,
+      restSeconds: ex.rx?.rest_seconds || null,
+      startRest: isLastOfGroup(day.value, ex.id)
+    }
+  )
 }
 
 function editSet(exIndex, setIndex) {
@@ -427,7 +453,8 @@ async function saveWorkout() {
             <div class="ex-title-block">
               <h2 class="subtitle m-0">{{ ex.exercise?.name || 'Exercise' }}</h2>
               <span v-if="exTypeTag(ex)" class="ex-type-tag">{{ exTypeTag(ex) }}</span>
-              <span v-if="rxLabel(ex.rx)" class="rx-target-hint">{{ rxLabel(ex.rx) }}</span>
+              <span v-if="rxLabel(ex.rx)" class="rx-target-hint">{{
+                rxLabel(ex.rx, !usesReps(measurementOf(ex.exercise))) }}</span>
               <span v-if="ex.rx?.notes" class="rx-note">{{ ex.rx.notes }}</span>
               <span v-if="ex.prevSets && ex.prevSets.length > 0" class="prev-session-hint">
                 Last: {{ formatPrevSets(ex.prevSets) }}
@@ -467,6 +494,7 @@ async function saveWorkout() {
               :set="s"
               :index="setIndex"
               :weight-unit="workoutStore.weightUnit"
+              :measurement="measurementOf(ex.exercise)"
               @toggle-warmup="toggleWarmup(s)"
               @save="saveSet(exIndex, setIndex)"
               @edit="editSet(exIndex, setIndex)"

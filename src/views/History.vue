@@ -10,6 +10,7 @@ import AppModal from '../components/AppModal.vue'
 import EditWorkoutModal from '../components/EditWorkoutModal.vue'
 import { useToastStore } from '../stores/toast'
 import { formatWeight } from '../utils/units'
+import { countsTowardTonnage, formatDuration, measurementOf } from '../utils/measurement'
 
 const historyStore = useHistoryStore()
 const workoutStore = useWorkoutStore()
@@ -63,6 +64,15 @@ const editTarget = ref(null)
 
 // Header "Export" dropdown (CSV / JSON).
 const exportMenuOpen = ref(false)
+
+// One logged set as a pill label. A hold shows its time; an unloaded
+// bodyweight set shows just the reps (not "0kg x 12"); everything else keeps
+// the familiar weight x reps.
+function setValueLabel(set) {
+  if (set.duration_seconds) return formatDuration(set.duration_seconds)
+  if (!Number(set.weight)) return `${set.reps}`
+  return `${formatWeight(set.weight, workoutStore.weightUnit)}${workoutStore.weightUnit} x ${set.reps}`
+}
 
 function toggleMenu(id) {
   openMenuId.value = openMenuId.value === id ? null : id
@@ -163,8 +173,14 @@ const pastWorkouts = computed(() => {
         dateStr: new Date(log.date_timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
         dayName: day ? day.day_name : 'Unknown Day',
         ProgramName: program ? program.name : 'Unknown Program',
-        // Warm-up sets don't count toward volume.
-        totalVolume: sets.reduce((acc, s) => acc + ((s.set_type || 'working') !== 'warmup' ? s.weight * s.reps : 0), 0),
+        // Warm-ups don't count toward volume, and neither do bodyweight or
+        // timed exercises — their weight is added load, not the load itself
+        // (same rule the server applies on the Progress page).
+        totalVolume: sets.reduce((acc, s) => {
+          if ((s.set_type || 'working') === 'warmup') return acc
+          if (!countsTowardTonnage(measurementOf(s.exercise))) return acc
+          return acc + s.weight * s.reps
+        }, 0),
         durationMin,
         numExercises,
         numSets: sets.length,
@@ -390,8 +406,8 @@ onUnmounted(() => {
               <div v-for="(set, sIdx) in group.sets" :key="set.id" class="history-set-pill">
                 <span class="set-num-label">{{ (set.set_type || 'working') === 'warmup' ? 'W' : 'S' + (sIdx + 1)
                   }}</span>
-                <span class="set-val-label">{{ formatWeight(set.weight, workoutStore.weightUnit) }}{{
-                  workoutStore.weightUnit }} x {{ set.reps }}<template v-if="set.rpe"> @{{ set.rpe }}</template></span>
+                <span class="set-val-label">{{ setValueLabel(set) }}<template v-if="set.rpe"> @{{ set.rpe
+                  }}</template></span>
               </div>
             </div>
           </div>

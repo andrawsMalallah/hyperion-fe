@@ -1,9 +1,13 @@
 <script setup>
 import { computed } from 'vue'
 import PrimaryButton from './PrimaryButton.vue'
+import { WEIGHTED, canSaveSet, requiresWeight, usesReps } from '../utils/measurement'
 
 // One logged set inside an exercise card mid-workout: the warm-up toggle, the
-// weight / reps / RPE inputs, and the save / edit / remove actions.
+// value inputs, and the save / edit / remove actions.
+//
+// Which inputs appear depends on the exercise's measurement type: weight x reps,
+// reps with optional added weight, or a hold in seconds.
 //
 // `set` is the parent's reactive session row and is bound with v-model here, so
 // typing writes straight back to the session the parent saves. The parent stays
@@ -21,20 +25,24 @@ const props = defineProps({
   weightUnit: {
     type: String,
     required: true
+  },
+  measurement: {
+    type: String,
+    default: WEIGHTED
   }
 })
 
 defineEmits(['toggle-warmup', 'save', 'edit', 'remove'])
 
-// A set needs a non-negative weight and at least one rep before it can be
-// logged. Bodyweight/timed movements aren't supported yet (ROADMAP 1.9), so
-// weight is required rather than optional.
-const canSave = computed(() => {
-  const { weight, reps } = props.set
-  const hasWeight = weight !== '' && weight !== null && weight !== undefined && weight >= 0
-  const hasReps = reps !== '' && reps !== null && reps !== undefined && reps >= 1
-  return hasWeight && hasReps
-})
+const isTimed = computed(() => !usesReps(props.measurement))
+
+// Bodyweight sets show a weight box too, but it's optional added load — the
+// placeholder says so rather than naming the unit alone.
+const weightPlaceholder = computed(() =>
+  requiresWeight(props.measurement) ? props.weightUnit : `+${props.weightUnit}`
+)
+
+const canSave = computed(() => canSaveSet(props.set, props.measurement))
 </script>
 
 <template>
@@ -49,30 +57,47 @@ const canSave = computed(() => {
     >
       {{ set.set_type === 'warmup' ? 'W' : index + 1 }}
     </button>
-    <div class="set-col">
-      <input
-        type="number"
-        inputmode="decimal"
-        class="input-large set-input"
-        v-model="set.weight"
-        :placeholder="weightUnit"
-        :aria-label="`Set ${index + 1} weight (${weightUnit})`"
-        min="0"
-        :disabled="set.completed"
-      />
-    </div>
-    <div class="set-col">
+    <!-- Timed exercises take a single duration box in place of weight + reps. -->
+    <div v-if="isTimed" class="set-col set-col-wide">
       <input
         type="number"
         inputmode="numeric"
         class="input-large set-input"
-        v-model="set.reps"
-        placeholder="Reps"
-        :aria-label="`Set ${index + 1} reps`"
+        v-model="set.duration_seconds"
+        placeholder="Seconds"
+        :aria-label="`Set ${index + 1} duration in seconds`"
         min="1"
         :disabled="set.completed"
       />
     </div>
+    <template v-else>
+      <div class="set-col">
+        <input
+          type="number"
+          inputmode="decimal"
+          class="input-large set-input"
+          v-model="set.weight"
+          :placeholder="weightPlaceholder"
+          :aria-label="requiresWeight(measurement)
+            ? `Set ${index + 1} weight (${weightUnit})`
+            : `Set ${index + 1} added weight (${weightUnit}, optional)`"
+          min="0"
+          :disabled="set.completed"
+        />
+      </div>
+      <div class="set-col">
+        <input
+          type="number"
+          inputmode="numeric"
+          class="input-large set-input"
+          v-model="set.reps"
+          placeholder="Reps"
+          :aria-label="`Set ${index + 1} reps`"
+          min="1"
+          :disabled="set.completed"
+        />
+      </div>
+    </template>
     <div class="set-col rpe-col">
       <input
         type="number"
@@ -152,5 +177,11 @@ const canSave = computed(() => {
 
 .set-row.is-warmup .set-input {
   opacity: 0.85;
+}
+
+/* A timed set has one input where a weighted one has two, so it takes both
+   columns' width — keeping every set row the same shape down the card. */
+.set-col-wide {
+  flex: 2;
 }
 </style>

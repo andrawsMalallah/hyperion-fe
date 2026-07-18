@@ -11,6 +11,7 @@ import TrendChart from '../components/TrendChart.vue'
 import VolumeChart from '../components/VolumeChart.vue'
 import BodyWeightChart from '../components/BodyWeightChart.vue'
 import { dateFmt } from '../utils/chart'
+import { formatDuration } from '../utils/measurement'
 
 const progressStore = useProgressStore()
 const bodyweightStore = useBodyweightStore()
@@ -63,6 +64,18 @@ const weekStats = computed(() => progressStore.week)
 const recentPRs = computed(() =>
   progressStore.recentPrs.map(pr => ({ ...pr, date: new Date(pr.date) }))
 )
+
+// A PR reads differently per measurement type: an estimated 1RM for weighted
+// exercises, a rep count for bodyweight, a hold for timed. `kind` comes from
+// the server so the two can't disagree about which math produced the record.
+function prDetail(pr) {
+  const added = Number(pr.weight) > 0 ? ` +${formatWeight(pr.weight, unit.value)}${unit.value}` : ''
+
+  if (pr.kind === 'duration') return `${formatDuration(pr.duration_seconds)} hold${added}`
+  if (pr.kind === 'reps') return `${pr.reps} reps${added}`
+
+  return `${formatWeight(pr.weight, unit.value)}${unit.value} × ${pr.reps} · est. ${formatWeight(pr.e1rm, unit.value)}${unit.value}`
+}
 
 // ---- Chart geometry
 // viewWidth is the visible plotting area (the card's inner width). Each chart
@@ -292,7 +305,7 @@ async function deleteBodyEntry(entry) {
             <span class="pr-badge" aria-hidden="true">PR</span>
             <div class="pr-info">
               <span class="pr-exercise">{{ pr.exercise }}</span>
-              <span class="pr-detail">{{ formatWeight(pr.weight, unit) }}{{ unit }} × {{ pr.reps }} · est. {{ formatWeight(pr.e1rm, unit) }}{{ unit }}</span>
+              <span class="pr-detail">{{ prDetail(pr) }}</span>
             </div>
             <span class="pr-date">{{ dateFmt(pr.date) }}</span>
           </div>

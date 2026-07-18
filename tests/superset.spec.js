@@ -10,8 +10,13 @@ const FIRST_REST = 180
 const LAST_REST = 60
 
 async function seedSupersetProgram(request, token) {
-  const catalog = (await api(request, token, 'GET', '/exercises?per_page=2')).data
-  expect(catalog.length, 'seeded exercise catalog').toBeGreaterThanOrEqual(2)
+  // Weighted exercises specifically: this spec drives the weight + reps inputs,
+  // and since ROADMAP 1.9 the catalog also holds bodyweight and timed ones whose
+  // set rows have different fields (an added-weight box, or a duration).
+  const catalog = (await api(request, token, 'GET', '/exercises?per_page=30')).data
+    .filter(exercise => exercise.measurement_type === 'weighted')
+    .slice(0, 2)
+  expect(catalog.length, 'seeded weighted exercises').toBeGreaterThanOrEqual(2)
 
   await api(request, token, 'POST', '/programs', {
     name: 'Superset Program',

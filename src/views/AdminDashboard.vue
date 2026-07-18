@@ -4,6 +4,7 @@ import { useAdminStore } from '../stores/admin'
 import BackButton from '../components/BackButton.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import AppModal from '../components/AppModal.vue'
+import { measurementLabel } from '../utils/measurement'
 
 const admin = useAdminStore()
 
@@ -132,6 +133,7 @@ const statusMeta = {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Contributor</th>
               <th>Actions</th>
             </tr>
@@ -142,6 +144,7 @@ const statusMeta = {
               <td><span class="sk-bar" style="width: 80%;"></span></td>
               <td><span class="sk-bar" style="width: 60%;"></span></td>
               <td><span class="sk-bar" style="width: 55%;"></span></td>
+              <td><span class="sk-bar" style="width: 50%;"></span></td>
               <td><span class="sk-bar" style="width: 70%;"></span></td>
               <td>
                 <div class="row-actions">
@@ -168,6 +171,7 @@ const statusMeta = {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Contributor</th>
               <th>Actions</th>
             </tr>
@@ -178,6 +182,7 @@ const statusMeta = {
               <td class="td-name"><span class="name-inner">{{ exercise.name }}</span></td>
               <td>{{ exercise.target_muscle_group }}</td>
               <td>{{ exercise.mechanics_type }}</td>
+              <td>{{ measurementLabel(exercise.measurement_type) }}</td>
               <td class="td-muted">{{ exercise.contributor ? exercise.contributor.name : '—' }}</td>
               <td>
                 <div class="row-actions">
@@ -269,6 +274,7 @@ const statusMeta = {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Contributor</th>
               <th>Status</th>
               <th>Action</th>
@@ -280,6 +286,7 @@ const statusMeta = {
               <td><span class="sk-bar" style="width: 80%;"></span></td>
               <td><span class="sk-bar" style="width: 60%;"></span></td>
               <td><span class="sk-bar" style="width: 55%;"></span></td>
+              <td><span class="sk-bar" style="width: 50%;"></span></td>
               <td><span class="sk-bar" style="width: 70%;"></span></td>
               <td><span class="sk-bar sk-bar-pill"></span></td>
               <td><span class="sk-bar sk-bar-btn"></span></td>
@@ -302,6 +309,7 @@ const statusMeta = {
               <th>Name</th>
               <th>Muscle Group</th>
               <th>Mechanics</th>
+              <th>Measured</th>
               <th>Contributor</th>
               <th>Status</th>
               <th>Action</th>
@@ -320,6 +328,7 @@ const statusMeta = {
               </td>
               <td>{{ exercise.target_muscle_group }}</td>
               <td>{{ exercise.mechanics_type }}</td>
+              <td>{{ measurementLabel(exercise.measurement_type) }}</td>
               <td>
                 <button
                   v-if="exercise.contributor"
