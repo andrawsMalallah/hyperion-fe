@@ -5,6 +5,7 @@ import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
 import AppModal from '../components/AppModal.vue'
 import BackButton from '../components/BackButton.vue'
+import RefreshButton from '../components/RefreshButton.vue'
 import { useDebouncedSearch } from '../composables/useDebouncedSearch'
 
 const discoverStore = useDiscoverStore()
@@ -31,6 +32,13 @@ let observer = null
 
 async function fetchPrograms(reset = false, isScroll = false) {
   await discoverStore.fetchDiscoverPrograms(reset, isScroll)
+}
+
+// Force a fresh reload from page 1 (bypasses the 60s stale cache), keeping the
+// active search. Confirmation toast so a same-data refresh still signals it ran.
+async function refreshDiscover() {
+  await fetchPrograms(true, false)
+  toast.success('Programs refreshed.')
 }
 
 const { onSearchInput, cancel: cancelSearch } = useDebouncedSearch(
@@ -109,6 +117,7 @@ onUnmounted(() => {
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
       <BackButton />
       <h1 class="title m-0">Discover Programs</h1>
+      <RefreshButton style="margin-left: auto;" :loading="loading" @refresh="refreshDiscover" />
     </div>
 
     <!-- Search Bar (Premium, clean design) -->

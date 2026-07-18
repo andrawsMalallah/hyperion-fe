@@ -5,6 +5,7 @@ import { useWorkoutStore } from '../stores/workout'
 import { useProgramStore } from '../stores/program'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
+import RefreshButton from '../components/RefreshButton.vue'
 import AppModal from '../components/AppModal.vue'
 import EditWorkoutModal from '../components/EditWorkoutModal.vue'
 import { useToastStore } from '../stores/toast'
@@ -42,6 +43,14 @@ function setRange(key) {
 
 function clearFilters() {
   historyStore.clearFilters()
+}
+
+// Force a fresh reload from page 1 (bypasses the 60s stale cache), respecting
+// the active filters. A confirmation toast so a same-data refresh still signals
+// it worked; the store surfaces its own error toast on failure.
+async function refreshHistory() {
+  await historyStore.fetchHistory(true)
+  if (!historyStore.loadFailed) toast.success('History refreshed.')
 }
 
 // Per-card overflow (⋯) menu, delete confirm, and edit modal.
@@ -226,6 +235,8 @@ onUnmounted(() => {
           <button class="history-menu-item" @click="doExport('json')">Download JSON</button>
         </div>
       </div>
+
+      <RefreshButton :loading="historyStore.historyLoading" @refresh="refreshHistory" />
     </div>
 
     <!-- Filter bar: program dropdown + date-range segmented control. Hidden only

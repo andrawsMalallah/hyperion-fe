@@ -188,3 +188,31 @@ test('History can be filtered by program and by date range', async ({ page, requ
   await expect(realCards.filter({ hasText: `x ${RECENT_REPS}` })).toHaveCount(1)
   await expect(realCards.filter({ hasText: `x ${OLD_REPS}` })).toHaveCount(0)
 })
+
+/**
+ * Manual refresh (ROADMAP 3.6): the read stores cache for 60s, so in an installed
+ * PWA (no native pull-to-refresh) a user has no way to force a reload. The refresh
+ * button must bypass that cache and hit the server — that's the whole point, so
+ * asserting the GET fires is the meaningful check.
+ */
+test('the refresh button forces a fresh history fetch', async ({ page, authToken }) => {
+  // authToken is destructured to trigger the fixture that injects the session —
+  // without it, /history redirects to /login and no list ever renders.
+  expect(authToken).toBeTruthy()
+  await page.goto('/history')
+  // Wait for the initial list to actually land (a real card or the empty state,
+  // not the aria-hidden skeleton) so the store is loaded and its TTL has started.
+  // Generous timeout: this is the run's first navigation for a project, so it can
+  // eat Vite's cold on-demand module transform on top of the initial fetch.
+  await expect(
+    page.locator('.history-list:not([aria-hidden="true"]) .history-card, .empty-state').first()
+  ).toBeVisible({ timeout: 15000 })
+
+  // A normal revisit within the TTL wouldn't refetch; the refresh click must.
+  const refreshRequest = page.waitForRequest(
+    req => req.url().includes('/api/workout-logs') && req.method() === 'GET'
+  )
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  const request = await refreshRequest
+  expect(request.url(), 'refresh reloads from page 1').toContain('page=1')
+})
