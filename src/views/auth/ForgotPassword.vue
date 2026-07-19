@@ -10,7 +10,7 @@
         </div>
 
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
-          <span v-if="loading">Sending...</span>
+          <PendingLabel v-if="loading" text="Sending" />
           <span v-else>Send Reset Link</span>
         </PrimaryButton>
 
@@ -38,6 +38,7 @@ import { ref, onUnmounted } from 'vue';
 import api from '@/api';
 import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PendingLabel from '@/components/PendingLabel.vue';
 
 // A request still in flight after this long is a cold-starting dyno and/or the
 // synchronous email send — that's when the reassurance is worth showing.

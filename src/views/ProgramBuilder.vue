@@ -8,6 +8,7 @@ import ExerciseSelectionModal from '../components/ExerciseSelectionModal.vue'
 import ExerciseSpecCard from '../components/ExerciseSpecCard.vue'
 import AppModal from '../components/AppModal.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import PendingLabel from '../components/PendingLabel.vue'
 import {
   isGroupType,
   typeOf,
@@ -503,15 +504,15 @@ const handleDeleteProgramConfirm = async () => {
 
               <button class="builder-delete-btn" @click="deleteProgram" :disabled="isDeleting || isSaving"
                 :title="route.params.programId === 'new' ? 'Discard Draft' : 'Delete Program'">
-                <div v-if="isDeleting" class="spinner button-spinner"></div>
-                {{ isDeleting ? (route.params.programId === 'new' ? 'Discarding...' : 'Deleting...') :
-                  (route.params.programId === 'new' ? 'Discard' : 'Delete') }}
+                <PendingLabel v-if="isDeleting"
+                  :text="route.params.programId === 'new' ? 'Discarding' : 'Deleting'" />
+                <template v-else>{{ route.params.programId === 'new' ? 'Discard' : 'Delete' }}</template>
               </button>
 
               <button class="builder-save-btn" @click="saveProgram" :disabled="!isDirty || isSaving"
                 :class="{ 'builder-save-btn--active': isDirty }">
-                <div v-if="isSaving" class="spinner button-spinner"></div>
-                {{ isSaving ? 'Saving...' : (isDirty ? 'Save' : 'Saved') }}
+                <PendingLabel v-if="isSaving" text="Saving" />
+                <template v-else>{{ isDirty ? 'Save' : 'Saved' }}</template>
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import PrimaryButton from '../components/PrimaryButton.vue'
 import AppModal from '../components/AppModal.vue'
 import ProgramShowcase from '../components/ProgramShowcase.vue'
 import SavedProgramCard from '../components/SavedProgramCard.vue'
+import PendingLabel from '../components/PendingLabel.vue'
 
 import { OverlayScrollbars } from 'overlayscrollbars'
 
@@ -204,7 +205,8 @@ onMounted(() => {
         </span>
       </div>
       <button class="sync-retry-btn tap-target" :disabled="syncStore.flushing" @click="syncStore.flush()">
-        {{ syncStore.flushing ? 'Syncing…' : 'Retry now' }}
+        <PendingLabel v-if="syncStore.flushing" text="Syncing" />
+        <template v-else>Retry now</template>
       </button>
     </div>
 
@@ -359,7 +361,10 @@ onMounted(() => {
               </svg>
             </div>
             <div class="create-text">
-              <span class="create-title-text">{{ importing ? 'Importing…' : 'Import Program' }}</span>
+              <span class="create-title-text">
+                <PendingLabel v-if="importing" text="Importing" />
+                <template v-else>Import Program</template>
+              </span>
               <span class="create-desc-text">Load a program from a .json file</span>
             </div>
           </div>

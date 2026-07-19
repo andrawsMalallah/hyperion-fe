@@ -19,7 +19,7 @@
         </div>
         
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
-          <span v-if="loading">Signing in...</span>
+          <PendingLabel v-if="loading" text="Signing in" />
           <span v-else>Sign In</span>
         </PrimaryButton>
 
@@ -47,6 +47,7 @@ import { ref, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PendingLabel from '@/components/PendingLabel.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
 // A login still in flight after this long is almost certainly a cold-starting

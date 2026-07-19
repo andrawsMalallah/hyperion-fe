@@ -27,7 +27,7 @@
         <p v-if="memberSince" class="member-since">Member since {{ memberSince }}</p>
 
         <PrimaryButton type="submit" style="width: 100%;" :disabled="savingProfile || !profileChanged">
-          <span v-if="savingProfile">Saving...</span>
+          <PendingLabel v-if="savingProfile" text="Saving" />
           <span v-else>Save Changes</span>
         </PrimaryButton>
       </form>
@@ -57,7 +57,7 @@
         </div>
 
         <PrimaryButton type="submit" style="width: 100%;" :disabled="savingPassword">
-          <span v-if="savingPassword">Changing...</span>
+          <PendingLabel v-if="savingPassword" text="Changing" />
           <span v-else>Change Password</span>
         </PrimaryButton>
       </form>
@@ -142,7 +142,7 @@
             Cancel
           </button>
           <button type="button" class="btn-danger tap-target" @click="confirmDelete" :disabled="deleting || !deletePassword">
-            <span v-if="deleting">Deleting…</span>
+            <PendingLabel v-if="deleting" text="Deleting" />
             <span v-else>Delete Account</span>
           </button>
         </div>
@@ -161,6 +161,7 @@ import PrimaryButton from '../components/PrimaryButton.vue';
 import PasswordInput from '../components/PasswordInput.vue';
 import AppModal from '../components/AppModal.vue';
 import BackButton from '../components/BackButton.vue';
+import PendingLabel from '../components/PendingLabel.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();

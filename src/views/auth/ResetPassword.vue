@@ -20,7 +20,7 @@
         </div>
         
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
-          <span v-if="loading">Resetting...</span>
+          <PendingLabel v-if="loading" text="Resetting" />
           <span v-else>Reset Password</span>
         </PrimaryButton>
       </form>
@@ -34,6 +34,7 @@ import { useRouter, useRoute } from 'vue-router';
 import api from '@/api';
 import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PendingLabel from '@/components/PendingLabel.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
 const router = useRouter();

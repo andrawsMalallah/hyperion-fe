@@ -9,6 +9,7 @@ import BackButton from '../components/BackButton.vue'
 import { formatWeight, toKg } from '../utils/units'
 import TrendChart from '../components/TrendChart.vue'
 import VolumeChart from '../components/VolumeChart.vue'
+import PendingLabel from '../components/PendingLabel.vue'
 import BodyWeightChart from '../components/BodyWeightChart.vue'
 import { dateFmt } from '../utils/chart'
 import { formatDuration } from '../utils/measurement'
@@ -347,7 +348,8 @@ async function deleteBodyEntry(entry) {
             <input id="bw-date" v-model="dateInput" type="date" :max="today" class="bw-input" />
           </div>
           <PrimaryButton type="submit" class="bw-submit" :disabled="!canLogWeight || bodyweightStore.saving">
-            {{ bodyweightStore.saving ? 'Saving…' : 'Log' }}
+            <PendingLabel v-if="bodyweightStore.saving" text="Saving" />
+            <template v-else>Log</template>
           </PrimaryButton>
         </form>
 

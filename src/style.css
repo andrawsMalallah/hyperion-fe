@@ -1745,20 +1745,6 @@ body.modal-open {
   background-color: rgba(255, 255, 255, 0.45);
 }
 
-.button-spinner {
-  width: 14px;
-  height: 14px;
-  border-width: 2px;
-  border-top-color: currentColor;
-  /* Buttons that host a spinner are flex containers, so the spinner is a flex
-     item and shrinks by default when the button is tight on width. Only the
-     width collapses (the height is fixed), and border-radius: 50% turns the
-     resulting non-square box into a thin spinning ellipse — seen on a 412px
-     phone, which sits just ABOVE the 400px breakpoint and so keeps the wider
-     18px padding. */
-  flex-shrink: 0;
-}
-
 .ex-header-actions {
   display: flex;
   gap: 8px;

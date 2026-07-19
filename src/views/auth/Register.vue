@@ -35,7 +35,7 @@
         </div>
 
         <PrimaryButton type="submit" style="width: 100%; margin-top: 8px;" :disabled="loading">
-          <span v-if="loading">Signing up...</span>
+          <PendingLabel v-if="loading" text="Signing up" />
           <span v-else>Sign Up</span>
         </PrimaryButton>
 
@@ -54,6 +54,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PendingLabel from '@/components/PendingLabel.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 
 const name = ref('');

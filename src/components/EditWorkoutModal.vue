@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import AppModal from './AppModal.vue'
 import PrimaryButton from './PrimaryButton.vue'
+import PendingLabel from './PendingLabel.vue'
 import { useHistoryStore } from '../stores/history'
 import { useToastStore } from '../stores/toast'
 import { toKg, fromKg } from '../utils/units'
@@ -214,7 +215,8 @@ async function save() {
       <div class="ew-footer">
         <button type="button" class="btn-secondary tap-target ew-cancel" @click="close">Cancel</button>
         <PrimaryButton class="ew-save" :disabled="saving || totalSets === 0" @click="save">
-          {{ saving ? 'Saving…' : 'Save changes' }}
+          <PendingLabel v-if="saving" text="Saving" />
+          <template v-else>Save changes</template>
         </PrimaryButton>
       </div>
     </div>

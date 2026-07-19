@@ -12,6 +12,7 @@ import ExerciseHistoryModal from '../components/ExerciseHistoryModal.vue'
 import WorkoutSummaryModal from '../components/WorkoutSummaryModal.vue'
 import SetRow from '../components/SetRow.vue'
 import PrimaryButton from '../components/PrimaryButton.vue'
+import PendingLabel from '../components/PendingLabel.vue'
 import { toKg, formatWeight } from '../utils/units'
 import {
   isGroupType,
@@ -514,8 +515,8 @@ async function saveWorkout() {
           <div class="builder-actions-divider"></div>
 
           <button class="builder-save-btn" @click="saveWorkout" :disabled="!hasChanges || isSaving" :class="{ 'builder-save-btn--active': hasChanges }">
-            <div v-if="isSaving" class="spinner button-spinner"></div>
-            {{ isSaving ? 'Saving...' : 'Save' }}
+            <PendingLabel v-if="isSaving" text="Saving" />
+            <template v-else>Save</template>
           </button>
         </div>
       </div>

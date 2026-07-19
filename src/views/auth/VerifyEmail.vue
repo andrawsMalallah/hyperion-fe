@@ -35,12 +35,12 @@
           </p>
 
           <PrimaryButton class="verify-btn" :disabled="resending" @click="resend">
-            <span v-if="resending">Sending…</span>
+            <PendingLabel v-if="resending" text="Sending" />
             <span v-else>Resend verification email</span>
           </PrimaryButton>
 
           <button class="link-btn" :disabled="checking" @click="checkVerified">
-            <span v-if="checking">Checking…</span>
+            <PendingLabel v-if="checking" text="Checking" />
             <span v-else>I've verified — continue</span>
           </button>
 
@@ -57,6 +57,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import PrimaryButton from '@/components/PrimaryButton.vue';
+import PendingLabel from '@/components/PendingLabel.vue';
 
 const route = useRoute();
 const router = useRouter();

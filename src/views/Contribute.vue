@@ -4,6 +4,7 @@ import api from '../api'
 import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
+import PendingLabel from '../components/PendingLabel.vue'
 import { MEASUREMENT_OPTIONS, WEIGHTED, measurementLabel } from '../utils/measurement'
 
 const toast = useToastStore()
@@ -227,7 +228,8 @@ async function submitExercise() {
         style="width: 100%; justify-content: center; margin-top: 8px;"
       >
         <span v-if="submitting" class="spinner" style="width: 18px; height: 18px; border-width: 2px; margin-right: 8px;"></span>
-        {{ submitting ? 'Submitting...' : 'Submit Exercise' }}
+        <PendingLabel v-if="submitting" text="Submitting" />
+        <template v-else>Submit Exercise</template>
       </PrimaryButton>
     </div>
 
