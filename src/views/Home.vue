@@ -226,20 +226,24 @@ onMounted(() => {
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Right Column: utility cards + saved programs. Order must match the
-           real layout below, or the page visibly reshuffles when it loads. -->
-      <div class="grid-col-right">
-        <div v-for="n in 3" :key="'util-' + n" class="card create-Program-card">
-          <div class="create-card-content">
-            <div class="skeleton-box skeleton-pulse" style="width: 42px; height: 42px; border-radius: 50%;"></div>
-            <div class="create-text" style="gap: 6px;">
-              <div class="skeleton-line skeleton-pulse" style="width: 160px; height: 16px;"></div>
-              <div class="skeleton-line skeleton-pulse" style="width: 200px; height: 13px;"></div>
+        <!-- Quick actions live in the left column, under the active program -->
+        <div class="col-actions">
+          <div v-for="n in 3" :key="'util-' + n" class="card create-Program-card">
+            <div class="create-card-content">
+              <div class="skeleton-box skeleton-pulse" style="width: 42px; height: 42px; border-radius: 50%;"></div>
+              <div class="create-text" style="gap: 6px;">
+                <div class="skeleton-line skeleton-pulse" style="width: 160px; height: 16px;"></div>
+                <div class="skeleton-line skeleton-pulse" style="width: 200px; height: 13px;"></div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Right Column: saved programs. Structure AND order must match the real
+           layout below, or the page visibly reshuffles when it loads. -->
+      <div class="col-saved">
         <div class="section-header-compact saved-programs-header">
           <div class="skeleton-line skeleton-pulse" style="width: 130px; height: 13px;"></div>
         </div>
@@ -287,10 +291,11 @@ onMounted(() => {
         <div v-else class="card empty-active-card text-center py-24">
           <p class="mb-16" style="color: var(--text-secondary);">No Active Programs</p>
         </div>
-      </div>
 
-      <!-- Right Column: Utilities, then Other Programs -->
-      <div class="grid-col-right">
+        <!-- Quick actions sit under the active program, inside the same column.
+             That DOM order is also the mobile stacking order (active → actions →
+             saved), so the narrow layout needs no reordering. -->
+        <div class="col-actions">
         <!-- Quick Action: Progress -->
         <router-link to="/progress" class="card create-Program-card no-underline">
           <div class="create-card-content">
@@ -351,31 +356,34 @@ onMounted(() => {
             @change="handleImportFile"
           />
         </label>
+        </div>
+      </div>
 
-        <!-- Saved programs sit below the quick actions. The heading is tied to
-             the list's own v-if so an empty list can't leave a stranded header. -->
-        <template v-if="inactiveprograms.length > 0">
-          <div class="section-header-compact saved-programs-header">
-            <h2 class="section-title-small">Saved Programs</h2>
-          </div>
+      <!-- Right column on wide screens, below the quick actions on narrow ones.
+           The whole block is tied to the list's own v-if so an empty list can't
+           leave a stranded header — and so the grid can drop the second column
+           entirely (:has) instead of reserving empty space for it. -->
+      <div class="col-saved" v-if="inactiveprograms.length > 0">
+        <div class="section-header-compact saved-programs-header">
+          <h2 class="section-title-small">Saved Programs</h2>
+        </div>
 
-          <!-- Scrollable programs List -->
-          <TransitionGroup name="programs-reorder" tag="div" class="programs-list">
-            <SavedProgramCard
-              v-for="Program in inactiveprograms"
-              :key="Program.id"
-              :program="Program"
-              :days="getProgramDays(Program.id)"
-              :expanded="expandedprogramId === Program.id"
-              :duplicating-program-id="duplicatingProgramId"
-              @toggle="toggleExpand"
-              @make-active="makeActive"
-              @edit="editProgram"
-              @export="programStore.exportProgram"
-              @duplicate="duplicateProgram"
-            />
-          </TransitionGroup>
-        </template>
+        <!-- Scrollable programs List -->
+        <TransitionGroup name="programs-reorder" tag="div" class="programs-list">
+          <SavedProgramCard
+            v-for="Program in inactiveprograms"
+            :key="Program.id"
+            :program="Program"
+            :days="getProgramDays(Program.id)"
+            :expanded="expandedprogramId === Program.id"
+            :duplicating-program-id="duplicatingProgramId"
+            @toggle="toggleExpand"
+            @make-active="makeActive"
+            @edit="editProgram"
+            @export="programStore.exportProgram"
+            @duplicate="duplicateProgram"
+          />
+        </TransitionGroup>
       </div>
     </div>
 
@@ -474,46 +482,68 @@ onMounted(() => {
   cursor: default;
 }
 
+/* Wide layout: active program + quick actions stacked in the left column, saved
+   programs alongside them on the right. With no saved programs that block isn't
+   rendered at all, so the second column collapses instead of reserving empty
+   space — hence the :has guard rather than a fixed two-column template. */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1.25fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
 }
 
+.dashboard-grid:has(.col-saved) {
+  grid-template-columns: 1.25fr 1fr;
+}
+
 @media (max-width: 800px) {
-  .dashboard-grid {
+  .dashboard-grid,
+  .dashboard-grid:has(.col-saved) {
     grid-template-columns: 1fr;
     gap: 24px;
   }
 }
 
-/* One consistent vertical rhythm for the right column. The flex gap is the
-   single source of spacing, so the default .card / mb-* bottom margins are
-   zeroed — this keeps the first quick-action card top-aligned with the active
-   program card on the left. */
-.grid-col-right {
+/* One consistent 12px rhythm inside each block. The flex gap is the single
+   source of spacing, so the default .card / mb-* bottom margins are zeroed. */
+.col-actions,
+.col-saved {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.grid-col-right > *,
+.col-actions > *,
+.col-saved > *,
 .programs-list .Program-card {
   margin-bottom: 0;
 }
 
-/* The active-program card is the last child of the left column; its default
-   .card bottom margin made the greeting→active gap (24px) smaller than the
-   active→saved gap (24px grid gap + 16px card margin) when stacked. Drop it so
-   both gaps are an even 24px. */
+/* Columns size to their content rather than stretching to the tallest one, so a
+   long saved list doesn't drag empty space under the quick actions. */
+.grid-col-left,
+.col-saved {
+  align-self: start;
+}
+
+/* Separates the quick actions from the active program above them. Applies at
+   every width, since they sit in the same column in both layouts. */
+.col-actions {
+  margin-top: 24px;
+}
+
+/* Breathing room at the bottom of each column. */
+.col-actions:last-child,
+.col-saved:last-child {
+  margin-bottom: 16px;
+}
+
+/* The active-program card's default .card bottom margin would stack onto the
+   quick actions' 24px offset below it, making that gap larger than every other
+   one on the page. The single source of that spacing is .col-actions. */
 .grid-col-left > .active-Program-showcase,
 .grid-col-left > .empty-active-card {
   margin-bottom: 0;
-}
-
-/* Breathing room under the last utility card at the bottom of the page. */
-.grid-col-right > :last-child {
-  margin-bottom: 16px;
 }
 
 .section-header-compact {
@@ -523,10 +553,11 @@ onMounted(() => {
   padding-bottom: 8px;
 }
 
-/* Extra space above the divider so the saved-programs group reads as a new
-   section rather than a fourth quick-action card. */
+/* The 24px grid gap now separates this block from the quick actions above it
+   when stacked; an extra offset would also push the heading out of line with
+   "Active Program" in the side-by-side layout. */
 .saved-programs-header {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .section-title-small {
