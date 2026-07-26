@@ -68,12 +68,24 @@ export const useBodyweightStore = defineStore('bodyweight', () => {
     }
   }
 
+  // Optimistic delete: the row leaves the UI the moment it's pressed, rather than
+  // when the request comes back. Waiting left a still-tappable entry on a slow
+  // connection, inviting repeat presses of a delete that was already in flight.
   async function remove(id) {
+    const index = entries.value.findIndex(entry => entry.id === id)
+    // Already gone — a repeat press that raced the first request. Nothing to do,
+    // and reporting failure keeps the caller from toasting a second success.
+    if (index === -1) return false
+
+    // Entries are oldest-first (the order the chart plots), so restoring a failed
+    // delete needs the original position, not a push.
+    const [removed] = entries.value.splice(index, 1)
+
     try {
       await api.delete(`/body-metrics/${id}`)
-      entries.value = entries.value.filter(entry => entry.id !== id)
       return true
     } catch (e) {
+      entries.value.splice(index, 0, removed)
       console.error('Failed to delete body-weight entry:', e)
       useToastStore().error('Could not delete that entry.')
       return false

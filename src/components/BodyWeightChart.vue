@@ -30,35 +30,45 @@ const LINE_GAP = 56 // min horizontal px between points
 const scrollLeft = ref(0)
 const hover = ref(null)
 
+// Always returns geometry, including with no entries at all: the plot frame is
+// drawn empty rather than replaced by a text-only empty state, so the card keeps
+// its shape and the chart reads as "nothing logged yet" instead of vanishing.
 const geo = computed(() => {
   const pts = props.points
-  if (pts.length < 2) return null
-  const contentW = Math.max(props.viewWidth, PAD.left + PAD.right + (pts.length - 1) * LINE_GAP)
+  // A lone point still needs a gap's worth of width so the frame isn't degenerate.
+  const contentW = Math.max(props.viewWidth, PAD.left + PAD.right + Math.max(pts.length - 1, 1) * LINE_GAP)
   const w = contentW - PAD.left - PAD.right
   const h = LINE_H - PAD.top - PAD.bottom
   const ys = pts.map(p => p.weight)
   // Pad the band a touch so the line isn't pinned to the top/bottom edges; a
-  // flat series (all equal) still needs a non-zero range to divide by.
-  const rawMax = Math.max(...ys)
-  const rawMin = Math.min(...ys)
+  // flat series (all equal) — or a single point, or none — still needs a
+  // non-zero range to divide by.
+  const rawMax = ys.length ? Math.max(...ys) : 0
+  const rawMin = ys.length ? Math.min(...ys) : 0
   const span = rawMax - rawMin || Math.max(rawMax * 0.02, 1)
   const yMax = rawMax + span * 0.15
   const yMin = rawMin - span * 0.15
-  const sx = i => PAD.left + (i / (pts.length - 1)) * w
+  // With a single entry there's no interval to spread across, so centre it.
+  const sx = i => (pts.length > 1 ? PAD.left + (i / (pts.length - 1)) * w : PAD.left + w / 2)
   const sy = v => PAD.top + h - ((v - yMin) / (yMax - yMin)) * h
   const mapped = pts.map((p, i) => ({ ...p, x: sx(i), y: sy(p.weight) }))
-  const path = mapped.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  // One point draws as a dot with no line between anything.
+  const path =
+    pts.length > 1
+      ? mapped.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+      : ''
   const ticks = []
   for (let i = 0; i <= 3; i++) {
     const v = yMin + ((yMax - yMin) * i) / 3
     ticks.push({ v, y: sy(v) })
   }
-  return { points: mapped, path, ticks, width: contentW }
+  // Gridlines always draw; labelling an axis derived from no data would be a lie.
+  return { points: mapped, path, ticks, width: contentW, labelAxis: ys.length > 0 }
 })
 
-// Map a client X (mouse or touch) to the nearest point.
+// Map a client X (mouse or touch) to the nearest point. Returns null when there
+// are none, so an empty frame simply has nothing to hover.
 function nearestPoint(clientX, target) {
-  if (!geo.value) return null
   const rect = target.getBoundingClientRect()
   const x = clientX - rect.left
   let nearest = null
@@ -79,17 +89,24 @@ function onTouch(e) {
 </script>
 
 <template>
-  <div v-if="!geo" class="chart-empty">Log at least two days to see your weight trend.</div>
-  <div v-else class="chart-holder">
+  <div class="chart-holder">
     <div class="chart-scroll" @scroll="scrollLeft = $event.target.scrollLeft">
-      <svg :width="geo.width" :height="LINE_H" @mousemove="onMove" @mouseleave="hover = null" @touchstart="onTouch" role="img" :aria-label="`Body weight trend, ${points.length} entries`">
+      <svg :width="geo.width" :height="LINE_H" @mousemove="onMove" @mouseleave="hover = null" @touchstart="onTouch" role="img" :aria-label="points.length ? `Body weight trend, ${points.length} entries` : 'Body weight trend, no entries logged yet'">
         <!-- recessive grid -->
         <g v-for="t in geo.ticks" :key="t.y">
           <line :x1="PAD.left" :x2="geo.width - PAD.right" :y1="t.y" :y2="t.y" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-          <text :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">{{ formatWeight(t.v, unit) }}</text>
+          <text v-if="geo.labelAxis" :x="PAD.left - 8" :y="t.y + 4" text-anchor="end" class="axis-text">{{ formatWeight(t.v, unit) }}</text>
         </g>
+        <!-- Empty frame: say so inside the plot rather than hiding the chart -->
+        <text
+          v-if="!geo.points.length"
+          :x="PAD.left + (geo.width - PAD.left - PAD.right) / 2"
+          :y="PAD.top + (LINE_H - PAD.top - PAD.bottom) / 2 + 4"
+          text-anchor="middle"
+          class="chart-empty-label"
+        >No entries yet</text>
         <!-- series -->
-        <path :d="geo.path" fill="none" :stroke="DATA_COLOR" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+        <path v-if="geo.path" :d="geo.path" fill="none" :stroke="DATA_COLOR" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
         <!-- points -->
         <circle
           v-for="p in geo.points"

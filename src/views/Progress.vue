@@ -6,6 +6,7 @@ import { useWorkoutStore } from '../stores/workout'
 import { useToastStore } from '../stores/toast'
 import PrimaryButton from '../components/PrimaryButton.vue'
 import BackButton from '../components/BackButton.vue'
+import AppModal from '../components/AppModal.vue'
 import { formatWeight, toKg } from '../utils/units'
 import TrendChart from '../components/TrendChart.vue'
 import VolumeChart from '../components/VolumeChart.vue'
@@ -159,7 +160,31 @@ async function submitWeight() {
   }
 }
 
-async function deleteBodyEntry(entry) {
+// Deletion is confirmed first: it's destructive, unrecoverable, and the row now
+// leaves the list the instant it's pressed — so a mis-tap would otherwise remove
+// a day's weight with no chance to catch it.
+const showDeleteModal = ref(false)
+const pendingDeleteEntry = ref(null)
+
+function askDeleteBodyEntry(entry) {
+  pendingDeleteEntry.value = entry
+  showDeleteModal.value = true
+}
+
+// Message is built here rather than inline so the template stays readable; it
+// names the date AND the weight, since the date alone is easy to misread in a
+// list of similar rows.
+const deleteEntryMessage = computed(() => {
+  const entry = pendingDeleteEntry.value
+  if (!entry) return ''
+  return `Delete the entry for ${bodyDateLabel(entry.measured_on)} (${formatWeight(entry.weight, unit.value)}${unit.value})? This can't be undone.`
+})
+
+async function deleteBodyEntry() {
+  const entry = pendingDeleteEntry.value
+  pendingDeleteEntry.value = null
+  if (!entry) return
+
   const ok = await bodyweightStore.remove(entry.id)
   if (ok) toastStore.success('Entry deleted.')
 }
@@ -317,18 +342,19 @@ async function deleteBodyEntry(entry) {
       <!-- Body Weight — always available, independent of workout data -->
       <div class="card chart-card mb-24 bodyweight-card" ref="bwWrap">
         <div class="bw-header">
-          <div>
-            <h2 class="chart-title">Body Weight</h2>
-            <!-- With fewer than two entries the chart renders its own "log at
-                 least two days" note, so this subtitle would stack a second grey
-                 line of small print under the same heading. Only one shows. -->
-            <p v-if="bodyPoints.length >= 2" class="chart-sub">One entry per day · logging a day again updates it</p>
-          </div>
+          <h2 class="chart-title">Body Weight</h2>
           <div v-if="bodyweightStore.latest" class="bw-current">
             <span class="bw-current-value">{{ formatWeight(bodyweightStore.latest.weight, unit) }}<span class="tile-unit">{{ unit }}</span></span>
             <span class="bw-current-date">{{ bodyDateLabel(bodyweightStore.latest.measured_on) }}</span>
           </div>
         </div>
+
+        <!-- Full-width under the header row rather than inside it: sharing that
+             flex row with the current-weight figure squeezed the note into a
+             narrow column on a phone. This is the card's ONE note at every state
+             — the chart no longer emits a competing text-only empty state, it
+             keeps its frame and labels itself inside the plot. -->
+        <p class="chart-sub bw-sub">One entry per day · logging a day again updates it</p>
 
         <BodyWeightChart :points="bodyPoints" :unit="unit" :view-width="viewWidth" />
 
@@ -364,11 +390,21 @@ async function deleteBodyEntry(entry) {
               type="button"
               class="bw-delete"
               :aria-label="`Delete entry for ${bodyDateLabel(entry.measured_on)}`"
-              @click="deleteBodyEntry(entry)"
+              @click="askDeleteBodyEntry(entry)"
             >×</button>
           </li>
         </ul>
       </div>
+
+      <AppModal
+        v-model:show="showDeleteModal"
+        title="Delete Entry"
+        :message="deleteEntryMessage"
+        confirm-text="Delete Entry"
+        cancel-text="Keep"
+        @confirm="deleteBodyEntry"
+        @cancel="pendingDeleteEntry = null"
+      />
     </template>
   </div>
 </template>
@@ -673,12 +709,18 @@ async function deleteBodyEntry(entry) {
 }
 
 /* --- Body Weight card --- */
+/* The note is a sibling below this row, so the header carries only part of the
+   gap — a full 12px here would make heading→note read wider than note→chart. */
 .bw-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
+}
+
+.bw-sub {
+  margin: 0 0 12px 0;
 }
 
 /* Right-aligned current weight so it reads as the card's headline figure. */
@@ -703,10 +745,14 @@ async function deleteBodyEntry(entry) {
 }
 
 /* Weight + date side by side; the Log button spans the full row beneath them —
-   comfortable on a narrow phone without wrapping unpredictably. */
+   comfortable on a narrow phone without wrapping unpredictably.
+   The columns are deliberately uneven: a weight is 3–5 characters, a date is a
+   full dd/mm/yyyy plus the calendar glyph, so an even split left the date field
+   cramped while the weight field ran mostly empty. minmax(0, …) keeps both able
+   to shrink below their content on a 320px screen. */
 .bw-form {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -750,8 +796,15 @@ async function deleteBodyEntry(entry) {
 /* The native date affordance renders inconsistently — on Chrome/Android it's a
    down chevron (indistinguishable from a select) jammed against the input's right
    edge. Swap it for an explicit calendar glyph pinned a controlled 12px in,
-   matching the exercise dropdown's chevron treatment. */
+   matching the exercise dropdown's chevron treatment.
+   ⚠️ `appearance: none` is the load-bearing line: on Android the chevron is part
+   of the control's native chrome, NOT the ::-webkit-calendar-picker-indicator, so
+   hiding that pseudo-element alone left the chevron drawn next to the new
+   calendar glyph. Same reason .exercise-select needs it. */
 .bw-input[type='date'] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   position: relative;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23AAAAAA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -774,6 +827,12 @@ async function deleteBodyEntry(entry) {
   padding: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+/* Edge/older WebKit add their own steppers and a clear "×" inside the field. */
+.bw-input[type='date']::-webkit-inner-spin-button,
+.bw-input[type='date']::-webkit-clear-button {
+  display: none;
 }
 
 .bw-submit {

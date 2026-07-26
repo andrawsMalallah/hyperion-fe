@@ -50,8 +50,21 @@ test('log, update and delete body weight from the Progress page', async ({ page,
   await expect(rowOne).toHaveCount(1)
   await expect(rowOne).toContainText('79kg')
 
-  // Delete day two -> its row disappears.
+  // Dismissing the warning must leave the entry alone — the row is removed
+  // optimistically on confirm, so a cancel that still deleted would look correct
+  // in the UI until the next fetch.
   await rowTwo.locator('.bw-delete').click()
+  await page.locator('[role="dialog"], .modal-content').first().getByText('Keep', { exact: true }).click()
+  await expect(rowTwo).toHaveCount(1)
+
+  // Delete day two -> confirm the warning modal -> its row disappears. The modal
+  // names the entry it's about, so assert that before confirming: a confirm step
+  // that pointed at the wrong row would still pass a bare click-and-check.
+  await rowTwo.locator('.bw-delete').click()
+  const deleteModal = page.locator('[role="dialog"], .modal-content').first()
+  await expect(deleteModal).toBeVisible()
+  await expect(deleteModal).toContainText(DAY_TWO_LABEL)
+  await deleteModal.locator('.btn-danger').click()
   await expect(rowTwo).toHaveCount(0)
   // Day one is untouched by the delete.
   await expect(rowOne).toHaveCount(1)
