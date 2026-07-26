@@ -67,8 +67,8 @@ test('targets set in the builder UI persist to the server', async ({ page, reque
 
   await page.goto(`/builder/${program.id}`)
 
-  // No prescription yet, so the strip offers "Set targets" rather than chips.
-  await page.locator('.target-add').first().click()
+  // The targets editor is opened from the icon button in the card header.
+  await page.locator('.ex-edit').first().click()
 
   await page.getByLabel('Sets', { exact: true }).fill('4')
   await page.getByLabel('Reps min', { exact: true }).fill('6')
@@ -110,7 +110,7 @@ test('a superset built in the builder UI persists to both exercises', async ({ p
   await page.goto(`/builder/${program.id}`)
 
   // Open the first exercise's targets and make it a superset.
-  await page.locator('.target-add').first().click()
+  await page.locator('.ex-edit').first().click()
   await page.locator('.rx-field-type select').first().selectOption('superset')
 
   // The member list appears on the anchor only, and warns until the group is

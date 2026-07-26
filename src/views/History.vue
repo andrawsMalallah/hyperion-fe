@@ -221,38 +221,34 @@ onUnmounted(() => {
     <div class="flex-row mb-24 gap-12" style="align-items: center;">
       <BackButton />
       <h1 class="title m-0">Workout History</h1>
-      <router-link to="/progress" class="btn-secondary no-underline progress-link"
-        style="margin-left: auto; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
-          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-          <polyline points="17 6 23 6 23 12"></polyline>
-        </svg>
-        Progress
-      </router-link>
 
-      <!-- Export history (CSV / JSON). Kept reachable when a filter is active so
-           the full history can still be exported even if the filter shows none. -->
-      <div v-if="pastWorkouts.length > 0 || filtersActive" class="history-export-wrap">
-        <button class="btn-secondary export-btn" @click.stop="toggleExportMenu"
-          :disabled="historyStore.exporting" :aria-expanded="exportMenuOpen" aria-haspopup="true" title="Export history"
-          aria-label="Export workout history">
-          <div v-if="historyStore.exporting" class="spinner" style="width: 14px; height: 14px; border-width: 2px;">
+      <!-- Export + refresh travel together as one right-aligned unit, matching
+           the Discover page's header. -->
+      <div class="history-header-actions">
+        <!-- Export history (CSV / JSON). Kept reachable when a filter is active
+             so the full history can still be exported even if the filter shows
+             none. -->
+        <div v-if="pastWorkouts.length > 0 || filtersActive" class="history-export-wrap">
+          <button class="btn-secondary export-btn" @click.stop="toggleExportMenu"
+            :disabled="historyStore.exporting" :aria-expanded="exportMenuOpen" aria-haspopup="true"
+            title="Export history" aria-label="Export workout history">
+            <div v-if="historyStore.exporting" class="spinner" style="width: 14px; height: 14px; border-width: 2px;">
+            </div>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+          <div v-if="exportMenuOpen" class="history-menu export-menu" @click.stop>
+            <button class="history-menu-item" @click="doExport('csv')">Download CSV</button>
+            <button class="history-menu-item" @click="doExport('json')">Download JSON</button>
           </div>
-          <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        </button>
-        <div v-if="exportMenuOpen" class="history-menu export-menu" @click.stop>
-          <button class="history-menu-item" @click="doExport('csv')">Download CSV</button>
-          <button class="history-menu-item" @click="doExport('json')">Download JSON</button>
         </div>
-      </div>
 
-      <RefreshButton :loading="historyStore.historyLoading" @refresh="refreshHistory" />
+        <RefreshButton :loading="historyStore.historyLoading" @refresh="refreshHistory" />
+      </div>
     </div>
 
     <!-- Filter bar: program dropdown + date-range segmented control. Hidden only
@@ -303,20 +299,28 @@ onUnmounted(() => {
     <!-- Loading Skeleton (Initial Load) — mirrors the real workout card -->
     <div v-if="loading && pastWorkouts.length === 0" class="history-list" aria-hidden="true">
       <div v-for="n in 3" :key="n" class="card history-card mb-24">
-        <!-- Header: left day/program info + right date badge -->
-        <div class="history-header pb-12 sk-header">
-          <div class="header-main-info">
-            <div class="sk sk-shimmer" style="width: 150px; height: 20px;"></div>
-            <div class="sk sk-shimmer" style="width: 100px; height: 13px;"></div>
+        <!-- Header: [day name · date badge + actions] then the program name.
+             Bar sizes mirror the real card's measured geometry (day name 24px,
+             date badge 25px, menu button 26×24, name line 16px) so the header is
+             the same height before and after load and nothing shifts. -->
+        <div class="history-header pb-12">
+          <div class="history-header-top">
+            <div class="sk sk-shimmer sk-day-bar" style="height: 24px;"></div>
+            <div class="history-header-right">
+              <div class="sk sk-shimmer" style="width: 128px; height: 25px; border-radius: 6px;"></div>
+              <div class="sk sk-shimmer" style="width: 26px; height: 24px; border-radius: 6px;"></div>
+            </div>
           </div>
-          <div class="sk sk-shimmer" style="width: 110px; height: 24px; border-radius: 6px;"></div>
+          <div class="sk sk-shimmer" style="width: 200px; height: 16px;"></div>
         </div>
 
-        <!-- Stats grid: 3 tiles matching the real summary -->
+        <!-- Stats grid: 3 tiles matching the real summary. Bar heights and the
+             4px gap mirror the real .stat-label (14px) / .stat-val (21px) text
+             boxes, so each tile is 61px tall in both states. -->
         <div class="history-stats-grid mb-24">
-          <div v-for="i in 3" :key="i" class="history-stat-box sk-stat-box">
-            <div class="sk sk-shimmer" style="width: 54px; height: 9px; margin-bottom: 8px;"></div>
-            <div class="sk sk-shimmer" style="width: 36px; height: 18px;"></div>
+          <div v-for="i in 3" :key="i" class="history-stat-box">
+            <div class="sk sk-shimmer" style="width: 54px; height: 14px; margin-bottom: 4px;"></div>
+            <div class="sk sk-shimmer" style="width: 36px; height: 21px;"></div>
           </div>
         </div>
 
@@ -338,41 +342,44 @@ onUnmounted(() => {
       <div v-for="w in pastWorkouts" :key="w.id" class="card history-card mb-24">
         <!-- Header -->
         <div class="history-header pb-12">
-          <div class="header-main-info">
-            <h2 class="subtitle m-0 text-accent" style="font-weight: 700;">{{ w.dayName }}</h2>
-            <span class="history-Program-tag">{{ w.ProgramName }}</span>
-          </div>
-          <div class="history-header-right">
-            <span class="history-date-badge">{{ w.dateStr }}</span>
-            <div class="history-menu-wrap">
-              <button class="history-menu-btn" @click.stop="toggleMenu(w.id)" :aria-expanded="openMenuId === w.id"
-                aria-haspopup="true" title="Workout actions" aria-label="Workout actions">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                  <circle cx="12" cy="5" r="1.6"></circle>
-                  <circle cx="12" cy="12" r="1.6"></circle>
-                  <circle cx="12" cy="19" r="1.6"></circle>
-                </svg>
-              </button>
-              <div v-if="openMenuId === w.id" class="history-menu" @click.stop>
-                <button class="history-menu-item" @click="openEdit(w)">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+          <!-- Day name shares its line with the date + actions; the program name
+               goes on its own line below, so a long one can't push them around. -->
+          <div class="history-header-top">
+            <h2 class="subtitle m-0 text-accent history-day-name" style="font-weight: 700;">{{ w.dayName }}</h2>
+            <div class="history-header-right">
+              <span class="history-date-badge">{{ w.dateStr }}</span>
+              <div class="history-menu-wrap">
+                <button class="history-menu-btn" @click.stop="toggleMenu(w.id)" :aria-expanded="openMenuId === w.id"
+                  aria-haspopup="true" title="Workout actions" aria-label="Workout actions">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                    <circle cx="12" cy="5" r="1.6"></circle>
+                    <circle cx="12" cy="12" r="1.6"></circle>
+                    <circle cx="12" cy="19" r="1.6"></circle>
                   </svg>
-                  Edit
                 </button>
-                <button class="history-menu-item history-menu-item--danger" @click="askDelete(w)">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  Delete
-                </button>
+                <div v-if="openMenuId === w.id" class="history-menu" @click.stop>
+                  <button class="history-menu-item" @click="openEdit(w)">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                    Edit
+                  </button>
+                  <button class="history-menu-item history-menu-item--danger" @click="askDelete(w)">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           </div>
+
+          <span class="history-Program-tag">{{ w.ProgramName }}</span>
         </div>
 
         <!-- Stats Grid (Premium visual summary) -->
@@ -479,19 +486,21 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* Header row: keep the Progress pill (and its icon) at natural size — on a
-   narrow phone the long title would otherwise squeeze the flex row and
-   collapse the SVG. Let the title absorb the squeeze / wrap instead. */
+/* Header row: let the title absorb any squeeze rather than pushing the two
+   icon buttons off the row. */
 .history-page .flex-row>.title {
   min-width: 0;
 }
 
-.progress-link {
+/* Export + refresh as one right-aligned unit — the Discover page's header
+   pattern. Two 32px icon buttons fit beside the title at every width, so this
+   row deliberately does NOT wrap. */
+.history-header-actions {
   flex-shrink: 0;
-}
-
-.progress-link svg {
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 /* Filter bar: program dropdown + date-range segmented control. All controls
@@ -676,13 +685,28 @@ onUnmounted(() => {
   background: var(--bg-surface);
 }
 
+/* Two stacked rows: [day name · date + actions] then the program name. The name
+   is deliberately NOT in the top row — as a flex sibling it widened the text
+   block and shoved the date + menu onto a stranded second line. */
 .history-header {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px 12px;
+  flex-direction: column;
+  gap: 4px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.history-header-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* Absorbs the squeeze so the date + menu keep their place on the row. */
+.history-day-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .history-header-right {
@@ -690,9 +714,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  /* Stays hard-right; drops onto its own right-aligned line only when the row
-     genuinely can't fit both groups. */
+  /* Hard-right on the day-name row. Only the (short) day name competes for that
+     row now, so this no longer needs to survive wrapping. */
   margin-left: auto;
+  justify-content: flex-end;
 }
 
 /* Overflow (⋯) menu */
@@ -800,16 +825,13 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.header-main-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
+/* A cloned-then-cloned program can carry a very long name, so it wraps rather
+   than being clipped to a single truncated line. */
 .history-Program-tag {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
+  overflow-wrap: break-word;
 }
 
 .history-date-badge {
@@ -923,6 +945,18 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Mirrors the real .history-day-name so the row wraps at the same width.
+   ⚠️ The small flex-basis is the point, not the max-width: a flex container
+   forms its lines from each item's flex-basis BEFORE shrinking, so a 160px
+   basis wrapped the date + menu onto a second line while the real (short) day
+   name still fit. Grows to fill, capped so it still reads as a bar.
+   Also overrides .sk's flex-shrink: 0 above. */
+.sk-day-bar {
+  flex: 1 1 60px;
+  min-width: 0;
+  max-width: 160px;
+}
+
 .sk-shimmer {
   position: relative;
   overflow: hidden;
@@ -950,21 +984,6 @@ onUnmounted(() => {
    group — on a gray placeholder it just reads as a stray colored border. */
 .sk-exercise-group {
   border-left: 1px solid var(--border-color);
-}
-
-/* Skeleton header aligns its two rows to the top like the real one. */
-.sk-header {
-  align-items: flex-start;
-}
-
-.sk-header .header-main-info {
-  gap: 8px;
-}
-
-/* Skeleton stat tiles keep the real tile chrome but drop the text centering
-   so the two bars stack naturally. */
-.sk-stat-box {
-  gap: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

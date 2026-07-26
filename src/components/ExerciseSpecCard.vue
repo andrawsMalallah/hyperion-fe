@@ -163,9 +163,32 @@ const groupStatus = computed(() => {
         </span>
       </div>
 
-      <span class="ex-group-badge" v-if="groupBadge">{{ groupBadge }}</span>
-
-      <div class="ex-reorder">
+      <!-- All controls are ONE flex child: as separate children they wrapped
+           independently, stranding the remove button alone on its own line at
+           phone widths. -->
+      <div class="ex-actions">
+        <!-- Targets toggle. Icon-only and pinned here so it sits in the same
+             place whether or not the exercise has targets yet — the strip below
+             renders nothing at all when it's empty. -->
+        <button class="ex-edit" @click="$emit('toggle-rx')"
+          :class="{ 'ex-edit--active': expanded }"
+          :aria-expanded="expanded"
+          :title="expanded ? 'Done editing targets' : 'Edit targets'"
+          :aria-label="expanded ? 'Done editing targets' : 'Edit targets'">
+          <!-- Sliders: reads as 'adjust settings' rather than 'rename'. -->
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"></line>
+            <line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line>
+            <line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line>
+            <line x1="9" y1="8" x2="15" y2="8"></line>
+            <line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
+        </button>
         <button class="ex-move" :disabled="index === 0" @click="$emit('move-up')" title="Move Up"
           aria-label="Move up">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
@@ -180,20 +203,26 @@ const groupStatus = computed(() => {
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </button>
+        <button class="ex-remove" @click="$emit('remove')" title="Remove Exercise"
+          aria-label="Remove exercise">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
-
-      <button class="ex-remove" @click="$emit('remove')" title="Remove Exercise"
-        aria-label="Remove exercise">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
     </div>
 
-    <!-- Targets strip: chips when set, or an "add targets" prompt -->
-    <div class="ex-targets">
+    <!-- Targets strip — read-only summary; the edit toggle lives in the header.
+         Skipped entirely when there's nothing to show, so an exercise with no
+         targets doesn't leave an empty gap under its name.
+         The group badge lives here rather than in the header: the header row is
+         a hard-width budget (index + the action buttons, none of them
+         shrinkable), so an extra nowrap pill there squeezed the exercise name to
+         one character per line on narrow phones. -->
+    <div class="ex-targets" v-if="groupBadge || hasAnyRx">
+      <span class="ex-group-badge" v-if="groupBadge">{{ groupBadge }}</span>
       <template v-if="hasAnyRx">
         <!-- Grouping types are already named by the header badge, so only the
              tag types need a chip here. -->
@@ -213,20 +242,7 @@ const groupStatus = computed(() => {
           <span class="chip-val">{{ chips.rest }}</span>
           <span class="chip-key">rest</span>
         </span>
-        <button class="target-edit" @click="$emit('toggle-rx')"
-          :class="{ 'target-edit--active': expanded }"
-          :aria-expanded="expanded">
-          {{ expanded ? 'Done' : 'Edit targets' }}
-        </button>
       </template>
-      <button v-else class="target-add" @click="$emit('toggle-rx')" :aria-expanded="expanded">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
-          stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-        Set targets
-      </button>
     </div>
 
     <!-- Editor — always mounted; height animates via grid-rows so it opens AND
@@ -274,7 +290,7 @@ const groupStatus = computed(() => {
             <span>Notes</span>
             <textarea rows="2" maxlength="500"
               v-model="rx.notes" @input="$emit('dirty')"
-              placeholder="Coaching cue — e.g. pause 1s at the bottom, elbows tucked"></textarea>
+              placeholder="Coaching cue — e.g. elbows tucked"></textarea>
           </label>
 
           <!-- How the exercise is performed. Drop/pyramid are tags on this
@@ -363,15 +379,22 @@ const groupStatus = computed(() => {
   box-shadow: 0 0 0 1px rgba(204, 255, 0, 0.08);
 }
 
-/* ---- Header row: index · title/muscle · reorder · remove ---- */
+/* ---- Header row: index · title/muscle · actions ----
+   Row gap is 12px to match the targets strip's and editor's margin-top: when
+   the actions wrap to their own line they become a stacked section like any
+   other, so all three gaps need the same rhythm. Column gap stays tighter. */
 .ex-card-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px 10px;
 }
 
+/* Nudged down to sit on the name's first line — with a two-line name, centring
+   would float it against the middle of the block instead. */
 .ex-index {
   flex-shrink: 0;
+  margin-top: 2px;
   width: 24px;
   height: 24px;
   display: flex;
@@ -385,9 +408,12 @@ const groupStatus = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* The reorder/remove controls can't shrink, so the title is the only flexible
+   child — without a floor, flex shrinks it toward zero and the name below wraps
+   one character per line. 90px keeps a readable column; the row wraps instead. */
 .ex-title {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 90px;
+  min-width: 90px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -415,10 +441,14 @@ const groupStatus = computed(() => {
 }
 
 /* Names the group a card belongs to ("Superset A"), so members are readable at
-   a glance without opening the editor. */
+   a glance without opening the editor. Sits in the targets strip, which wraps —
+   it keeps its own width and pushes nothing off the row. */
 .ex-group-badge {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
-  padding: 4px 9px;
+  height: 30px;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid rgba(204, 255, 0, 0.4);
   background: rgba(204, 255, 0, 0.08);
@@ -430,10 +460,24 @@ const groupStatus = computed(() => {
   white-space: nowrap;
 }
 
-.ex-reorder {
+/* Pushed to the row's end so the controls stay a single right-aligned cluster
+   whether the header fits on one line or the title wraps to its own. */
+.ex-actions {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
   gap: 4px;
+  margin-left: auto;
+}
+
+/* Phones: the cluster has wrapped onto its own line by this width, so dropping
+   the auto margin pulls it left — under the index chip, where the thumb sits,
+   instead of stranded against the far edge. */
+@media (max-width: 520px) {
+  .ex-actions {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .ex-move {
@@ -455,6 +499,31 @@ const groupStatus = computed(() => {
   cursor: not-allowed;
 }
 
+/* Targets toggle — same box as .ex-move, accent-tinted while the editor is open
+   so the card's expanded state is legible from the button itself. */
+.ex-edit {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ex-edit--active {
+  border-color: var(--primary-accent);
+  background: rgba(204, 255, 0, 0.1);
+  color: var(--primary-accent);
+}
+
+/* Matches .ex-move's box so the three controls read as one cluster; the danger
+   tint is what separates it, not a different shape. */
 .ex-remove {
   flex-shrink: 0;
   width: 30px;
@@ -463,9 +532,9 @@ const groupStatus = computed(() => {
   align-items: center;
   justify-content: center;
   border-radius: 7px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  background: rgba(255, 77, 77, 0.06);
+  color: var(--danger);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -480,6 +549,11 @@ const groupStatus = computed(() => {
     color: var(--danger);
     border-color: rgba(255, 77, 77, 0.4);
     background: rgba(255, 77, 77, 0.08);
+  }
+  .ex-edit:not(.ex-edit--active):hover {
+    color: var(--text-primary);
+    border-color: #555;
+    background: var(--bg-surface-hover);
   }
 }
 
@@ -517,51 +591,6 @@ const groupStatus = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
-}
-
-/* Edit / add-targets pills */
-.target-edit,
-.target-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.target-edit {
-  margin-left: auto;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-}
-
-.target-edit--active {
-  border-color: var(--primary-accent);
-  color: var(--primary-accent);
-}
-
-.target-add {
-  border: 1px dashed rgba(204, 255, 0, 0.4);
-  background: rgba(204, 255, 0, 0.03);
-  color: var(--primary-accent);
-}
-
-@media (hover: hover) {
-  .target-edit:hover {
-    color: var(--text-primary);
-    border-color: #555;
-  }
-  .target-add:hover {
-    background: rgba(204, 255, 0, 0.08);
-  }
 }
 
 /* ---- Editor: labeled numeric grid, 5→3→2 columns ---- */

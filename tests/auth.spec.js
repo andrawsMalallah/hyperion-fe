@@ -20,7 +20,10 @@ test('an existing user can log in', async ({ page }) => {
   await page.click('button[type=submit]')
 
   await page.waitForURL('**/')
-  await expect(page.getByText('Hello,')).toBeVisible()
+  // Home's "Hello, <name>" banner was removed as redundant — the signed-in
+  // user's name now only appears in the top nav, so that's the proof we're in
+  // the authenticated shell.
+  await expect(page.locator('.user-menu-name')).toHaveText(account.user.name)
 })
 
 test('registering lands on the verification screen, not the app', async ({ page }) => {
@@ -107,5 +110,6 @@ test('a reset token sets a new password that can log in', async ({ page }) => {
   await page.click('button[type=submit]')
 
   await page.waitForURL('**/')
-  await expect(page.getByText('Hello,')).toBeVisible()
+  // See the note in the log-in test: the name lives in the top nav now.
+  await expect(page.locator('.user-menu-name')).toHaveText(account.user.name)
 })
