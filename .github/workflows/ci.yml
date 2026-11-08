@@ -43,7 +43,8 @@ jobs:
 
   e2e:
     name: E2E (Playwright)
-    runs-on: ubuntu-latest
+    # Playwright 1.60 supports Ubuntu 24.04; ubuntu-latest can advance beyond it.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout frontend
