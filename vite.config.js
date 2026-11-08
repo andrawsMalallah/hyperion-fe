@@ -41,11 +41,12 @@ function buildContentSecurityPolicy(connectOrigins) {
  *
  * Build-only (`apply: 'build'`) on purpose: index.html is shared with the dev
  * server, where a production CSP would block both the local API origin and
- * Vite's HMR websocket. Real enforcement in production comes from the Render
- * static-site response headers — this meta tag is the in-code fallback, and it
- * cannot express frame-ancestors / nosniff / Referrer-Policy (headers only).
+ * Vite's HMR websocket. The Node server reads the matching response headers
+ * emitted with this build, so its policy always matches the bundled API URL.
  */
 function contentSecurityPolicyPlugin(connectOrigins) {
+  const contentSecurityPolicy = buildContentSecurityPolicy(connectOrigins)
+
   return {
     name: 'hyperion-csp-meta',
     apply: 'build',
@@ -57,12 +58,25 @@ function contentSecurityPolicyPlugin(connectOrigins) {
             tag: 'meta',
             attrs: {
               'http-equiv': 'Content-Security-Policy',
-              content: buildContentSecurityPolicy(connectOrigins),
+              content: contentSecurityPolicy,
             },
             injectTo: 'head-prepend',
           },
         ],
       }
+    },
+    generateBundle() {
+      // A hidden build artifact keeps runtime headers tied to build-time origins.
+      // frame-ancestors only works as a response header, never in the meta tag.
+      this.emitFile({
+        type: 'asset',
+        fileName: '.security-headers.json',
+        source: JSON.stringify({
+          'Content-Security-Policy': `${contentSecurityPolicy}; frame-ancestors 'none'`,
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        }),
+      })
     },
   }
 }

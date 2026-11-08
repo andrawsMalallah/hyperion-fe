@@ -19,7 +19,7 @@ This repo is the **Vue 3 SPA**. The API lives in a separate repo
 
 ## Prerequisites
 
-- **Node 25+** (Vite requires a modern Node; older majors break the build)
+- **Node 24 LTS** (selected by `.node-version`; minimum supported: 22.18)
 - A running instance of the backend API
 
 ## Setup
@@ -37,6 +37,8 @@ API base URL is read from `VITE_API_URL` at build time:
 | --- | --- |
 | Dev server | `npx vite --host 127.0.0.1 --port 5173` |
 | Production build | `npx vite build` |
+| Production Node server | `npm start` (build first; defaults to port 3000) |
+| Node server tests | `npm run test:server` |
 | Quick compile check | `npx vite build --mode development` |
 | E2E tests | `npx playwright test` |
 
@@ -65,11 +67,44 @@ src/
 
 ## Deploy
 
-Production is **Render**, which serves the **committed `dist/` folder** (no build
-step on the server). Therefore:
+The existing production service is still a **Render Static Site**, serving the
+committed `dist/`. Keep rebuilding and committing `dist/` until the replacement
+Node Web Service has been verified and traffic has moved.
 
-> ⚠️ **Every frontend change that reaches the browser bundle requires
-> `npx vite build` and a recommit of `dist/`**, or the live site stays stale.
+### Prepared Node Web Service
+
+Create a Render **Web Service** connected to `andrawsMalallah/hyperion-fe`, with:
+
+| Setting | Value |
+| --- | --- |
+| Branch | `main` |
+| Language | Node |
+| Root directory | blank |
+| Build command | `npm ci --include=dev && npm run build` |
+| Start command | `npm start` |
+| Health check path | `/healthz` |
+| Auto-deploy | After CI checks pass |
+
+The server binds to `0.0.0.0` and Render's `PORT` (3000 locally). Render selects
+Node 24 from `.node-version`; remove any stale dashboard `NODE_VERSION` override
+or set it to the current Node 24 LTS release. No publish directory or static-site
+rewrite rule is needed. Free web services sleep after 15 idle minutes.
+
+Vite still creates `dist/`, but the new service builds it on every deployment.
+The server uses `sirv` for static files and Vue Router deep-link fallback. It
+serves the CSP, `nosniff` and referrer headers itself, using a hidden header file
+generated alongside the build from its API and Sentry origins. HTML, the service
+worker and other unversioned files revalidate; fingerprinted assets are immutable.
+
+Keep the current service available while testing the replacement. A new frontend
+origin requires updating the backend's Render `FRONTEND_URL` for CORS and emailed
+links. Test login, direct `/history` and `/builder/...` refreshes, password-reset
+and email-verification links, and the installed PWA before retiring the old site.
+Keeping the same custom domain preserves browser storage and the PWA origin;
+switching to a different `onrender.com` URL does not transfer local sessions or
+offline workouts. Back up any pending workouts before changing origin.
+
+After cutover, tracked `dist/` can be removed in a separately approved cleanup.
 
 ## More
 
