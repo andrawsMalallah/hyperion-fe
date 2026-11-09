@@ -50,7 +50,10 @@ API base URL is read from `VITE_API_URL` at build time:
 
 End-to-end tests run under **Playwright** (`tests/`). The suite is hermetic: it
 boots its own API (`:8100`) and SPA (`:5273`), so it never touches the dev ports
-and can run alongside `npm run dev`. It also runs in CI on every push.
+and can run alongside `npm run dev`. Run it locally with
+`npx playwright test --workers=1`; Playwright is not run in CI or during
+production deployment. CI retains the Node server HTTP tests and production
+build checks.
 
 ## Project structure
 
