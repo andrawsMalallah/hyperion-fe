@@ -85,9 +85,13 @@ function getExerciseCount(day) {
 
 <style scoped>
 .showcase-title {
+  /* Let the full name wrap beside the fixed actions instead of widening the grid. */
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 22px;
   font-weight: 700;
-  margin: 0;
+  margin: 0 12px 0 0;
   color: var(--primary-accent);
 }
 
