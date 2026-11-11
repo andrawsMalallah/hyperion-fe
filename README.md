@@ -70,46 +70,15 @@ src/
 
 ## Deploy
 
-The existing production service is still a **Render Static Site**, serving the
-committed `dist/`. Keep rebuilding and committing `dist/` until the replacement
-Node Web Service has been verified and traffic has moved.
+The primary deployment is a **Render Static Site** from `main`. Render builds
+with `npm ci --include=dev && npm run build` and publishes `dist`.
 
-### Prepared Node Web Service
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the exact dashboard settings, SPA rewrite,
+security headers, CI enforcement, cutover and manual acceptance checks.
 
-Create a Render **Web Service** connected to `andrawsMalallah/hyperion-fe`, with:
+The `node-server` branch preserves the Node Web Service fallback. Connect the
+Node service to that branch with build `npm ci --include=dev && npm run build`,
+start `npm start`, and health check `/healthz`. Keep it available until static
+hosting is verified. Future fixes need to reach both branches if both are used.
 
-| Setting | Value |
-| --- | --- |
-| Branch | `main` |
-| Language | Node |
-| Root directory | blank |
-| Build command | `npm ci --include=dev && npm run build` |
-| Start command | `npm start` |
-| Health check path | `/healthz` |
-| Auto-deploy | After CI checks pass |
-
-The server binds to `0.0.0.0` and Render's `PORT` (3000 locally). Render selects
-Node 24 from `.node-version`; remove any stale dashboard `NODE_VERSION` override
-or set it to the current Node 24 LTS release. No publish directory or static-site
-rewrite rule is needed. Free web services sleep after 15 idle minutes.
-
-Vite still creates `dist/`, but the new service builds it on every deployment.
-The server uses `sirv` for static files and Vue Router deep-link fallback. It
-serves the CSP, `nosniff` and referrer headers itself, using a hidden header file
-generated alongside the build from its API and Sentry origins. HTML, the service
-worker and other unversioned files revalidate; fingerprinted assets are immutable.
-
-Keep the current service available while testing the replacement. A new frontend
-origin requires updating the backend's Render `FRONTEND_URL` for CORS and emailed
-links. Test login, direct `/history` and `/builder/...` refreshes, password-reset
-and email-verification links, and the installed PWA before retiring the old site.
-Keeping the same custom domain preserves browser storage and the PWA origin;
-switching to a different `onrender.com` URL does not transfer local sessions or
-offline workouts. Back up any pending workouts before changing origin.
-
-After cutover, tracked `dist/` can be removed in a separately approved cleanup.
-
-## More
-
-See `CLAUDE.md` in this repo for the full architecture, conventions, and the
-pre-deploy checklist.
+Keep building and retaining tracked `dist/` until its cleanup is approved.
