@@ -16,7 +16,7 @@
   "dependencies": {
     "@sentry/vue": "^10.65.0",
     "axios": "^1.17.0",
-    "overlayscrollbars": "^2.16.0",
+    "overlayscrollbars": "^2.17.0",
     "overlayscrollbars-vue": "^0.5.10",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
